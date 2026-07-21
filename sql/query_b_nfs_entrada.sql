@@ -1,0 +1,35 @@
+/*
+  QUERY B — NFS DE ENTRADA RECEBIDAS
+  Sankhya / Oracle
+  TOPs validas: 2103, 2114, 2119, 2122, 2125, 2126,
+                2300, 2301, 2302, 2303, 2304, 2305, 2306, 2307, 2413
+*/
+SELECT
+    ENT.NUMNOTA                             AS NUMERO_NF,
+    ENT.DTNEG                               AS DATA_EMISSAO,
+    ENT.DTENTSAI                            AS DATA_RECEBIMENTO,
+    PAR.CODPARC                             AS COD_FORNECEDOR,
+    PAR.NOMEPARC                            AS FORNECEDOR,
+    ITE.CODPROD                             AS CODIGO_PRODUTO,
+    PRO.DESCRPROD                           AS DESCRICAO_PRODUTO,
+    ITE.QTDNEG                              AS QUANTIDADE_RECEBIDA,
+    ITE.VLRTOT                              AS VALOR_ITEM,
+    ENT.VLRNOTA                             AS VALOR_TOTAL_NF,
+    PRJ.IDENTIFICACAO                       AS PROJETO
+FROM
+    TGFCAB ENT
+    INNER JOIN TGFITE ITE ON ITE.NUNOTA  = ENT.NUNOTA
+    INNER JOIN TGFPRO PRO ON PRO.CODPROD = ITE.CODPROD
+    INNER JOIN TGFPAR PAR ON PAR.CODPARC = ENT.CODPARC
+    LEFT  JOIN TCSPRJ PRJ ON PRJ.CODPROJ = ENT.CODPROJ
+WHERE
+    ENT.CODTIPOPER IN (
+        2103, 2114, 2119, 2122, 2125, 2126,
+        2300, 2301, 2302, 2303, 2304, 2305,
+        2306, 2307, 2413
+    )
+    AND ENT.STATUSNOTA = 'L'
+    AND ENT.DTNEG     >= TO_DATE('2026-03-01', 'YYYY-MM-DD')
+    AND ITE.CODPROD   NOT IN (2999, 3000)
+ORDER BY
+    ENT.DTENTSAI DESC
