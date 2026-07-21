@@ -10,9 +10,17 @@ export const fmtInt = (n) => {
   return Math.round(parseFloat(n)).toLocaleString('pt-BR')
 }
 
+// Aceita qualquer formato: "2026-03-06 00:00:00+00", "2026-03-06T00:00:00", "2026-03-06"
 export const fmtDate = (d) => {
   if (!d) return '—'
-  try { return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR') } catch { return d }
+  try {
+    // Pega só a parte YYYY-MM-DD ignorando hora e timezone
+    const s = String(d).trim()
+    const match = s.match(/(\d{4})-(\d{2})-(\d{2})/)
+    if (!match) return '—'
+    const [, yyyy, mm, dd] = match
+    return `${dd}/${mm}/${yyyy}`
+  } catch { return '—' }
 }
 
 export const fmtCurrency = (n) => {
@@ -26,11 +34,21 @@ export const fmtDays = (n) => {
   return d === 1 ? '1 dia' : `${d} dias`
 }
 
+// Extrai só YYYY-MM-DD de qualquer formato de data
+const parseDate = (d) => {
+  if (!d) return null
+  const s = String(d).trim()
+  const m = s.match(/(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return null
+  return new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00`)
+}
+
 export const statusEmbarque = (dataEmbarque, qtdPendente) => {
   if (!dataEmbarque) return 'SEM_DATA'
   if (parseFloat(qtdPendente) <= 0) return 'ENTREGUE'
   const hoje = new Date()
-  const dt = new Date(dataEmbarque + 'T00:00:00')
+  const dt = parseDate(dataEmbarque)
+  if (!dt) return 'SEM_DATA'
   const diff = Math.floor((hoje - dt) / (1000 * 60 * 60 * 24))
   if (diff > 0) return 'ALERTA'
   if (diff >= -3) return 'EM_BREVE'
@@ -41,7 +59,8 @@ export const statusEntrega = (dataEntrega, qtdPendente) => {
   if (!dataEntrega) return 'SEM_DATA'
   if (parseFloat(qtdPendente) <= 0) return 'ENTREGUE'
   const hoje = new Date()
-  const dt = new Date(dataEntrega + 'T00:00:00')
+  const dt = parseDate(dataEntrega)
+  if (!dt) return 'SEM_DATA'
   const diff = Math.floor((hoje - dt) / (1000 * 60 * 60 * 24))
   if (diff > 0) return 'ATRASADO'
   if (diff >= -3) return 'EM_BREVE'
@@ -50,7 +69,9 @@ export const statusEntrega = (dataEntrega, qtdPendente) => {
 
 export const diasDiferenca = (data) => {
   if (!data) return null
-  return Math.floor((new Date() - new Date(data + 'T00:00:00')) / (1000 * 60 * 60 * 24))
+  const dt = parseDate(data)
+  if (!dt) return null
+  return Math.floor((new Date() - dt) / (1000 * 60 * 60 * 24))
 }
 
 export const cruzarOCxNF = (pedidos, nfs) => {
@@ -62,9 +83,9 @@ export const cruzarOCxNF = (pedidos, nfs) => {
     )
     let situacao = 'AGUARDANDO'
     if (match) {
-      const recebido = new Date(match.data_recebimento + 'T00:00:00')
-      const prevista = p.data_prevista_entrega ? new Date(p.data_prevista_entrega + 'T00:00:00') : null
-      situacao = prevista && recebido <= prevista ? 'NO_PRAZO' : 'ATRASO'
+      const recebido = parseDate(match.data_recebimento)
+      const prevista = parseDate(p.data_prevista_entrega)
+      situacao = recebido && prevista && recebido <= prevista ? 'NO_PRAZO' : 'ATRASO'
     }
     return { ...p, nf_vinculada: match || null, situacao_entrega: situacao }
   })
