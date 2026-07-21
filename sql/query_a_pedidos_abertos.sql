@@ -1,20 +1,10 @@
 /*
   QUERY A — PEDIDOS EM ABERTO
   Sankhya / Oracle
-  Campos: data_embarque (AD_DTEMBARQUE) e data_prevista_entrega (DTPREVENT)
-
-  LOGICA DE ALERTA DE EMBARQUE:
-  O campo AD_DTEMBARQUE indica quando o material DEVE sair do fornecedor.
-  NAO sabemos se o fornecedor embarcou ou nao. O sistema apenas expoe
-  os casos onde a data passou e o material ainda nao chegou, para que
-  o comprador verifique e decida se aplica multa.
-
-  PRIORIDADE:
-  1 = embarque atrasado (data passou, material nao chegou)
-  2 = entrega atrasada
-  3 = embarque vence em ate 3 dias
-  4 = entrega vence em ate 3 dias
-  5 = no prazo / sem data
+  TOPs validas: 2103, 2114, 2122, 2125, 2126,
+                2300, 2301, 2302, 2303, 2304, 2305, 2306, 2413
+  Removido: TIPMOV = 'O' e CODNAT = 510101
+  Substituido por: CODTIPOPER IN (lista de TOPs de compra)
 */
 SELECT
     CAB.NUMNOTA                                         AS NUMERO_PEDIDO,
@@ -31,26 +21,15 @@ SELECT
     ITE.VLRTOT                                          AS VALOR_ITEM,
     CAB.VLRNOTA                                         AS VALOR_TOTAL_PEDIDO,
     PRJ.IDENTIFICACAO                                   AS PROJETO,
-
     ROUND(SYSDATE - CAB.AD_DTEMBARQUE)                 AS DIAS_ATRASO_EMBARQUE,
     ROUND(SYSDATE - CAB.DTPREVENT)                     AS DIAS_ATRASO_ENTREGA,
-
     CASE
-        WHEN CAB.AD_DTEMBARQUE IS NOT NULL
-             AND CAB.AD_DTEMBARQUE < SYSDATE
-            THEN 1
-        WHEN CAB.DTPREVENT IS NOT NULL
-             AND CAB.DTPREVENT < SYSDATE
-            THEN 2
-        WHEN CAB.AD_DTEMBARQUE IS NOT NULL
-             AND CAB.AD_DTEMBARQUE <= SYSDATE + 3
-            THEN 3
-        WHEN CAB.DTPREVENT IS NOT NULL
-             AND CAB.DTPREVENT <= SYSDATE + 3
-            THEN 4
+        WHEN CAB.AD_DTEMBARQUE IS NOT NULL AND CAB.AD_DTEMBARQUE < SYSDATE THEN 1
+        WHEN CAB.DTPREVENT     IS NOT NULL AND CAB.DTPREVENT     < SYSDATE THEN 2
+        WHEN CAB.AD_DTEMBARQUE IS NOT NULL AND CAB.AD_DTEMBARQUE <= SYSDATE + 3 THEN 3
+        WHEN CAB.DTPREVENT     IS NOT NULL AND CAB.DTPREVENT     <= SYSDATE + 3 THEN 4
         ELSE 5
     END                                                 AS PRIORIDADE
-
 FROM
     TGFCAB CAB
     INNER JOIN TGFITE ITE ON ITE.NUNOTA  = CAB.NUNOTA
@@ -58,9 +37,12 @@ FROM
     INNER JOIN TGFPAR PAR ON PAR.CODPARC = CAB.CODPARC
     LEFT  JOIN TCSPRJ PRJ ON PRJ.CODPROJ = CAB.CODPROJ
 WHERE
-    CAB.TIPMOV      = 'O'
+    CAB.CODTIPOPER IN (
+        2103, 2114, 2122, 2125, 2126,
+        2300, 2301, 2302, 2303, 2304, 2305,
+        2306, 2413
+    )
     AND CAB.STATUSNOTA = 'L'
-    AND CAB.CODNAT     = 510101
     AND CAB.DTNEG     >= TO_DATE('2026-01-01', 'YYYY-MM-DD')
     AND ITE.CODPROD   NOT IN (2999, 3000)
     AND (ITE.QTDNEG - NVL(ITE.QTDENTREGUE, 0)) > 0
