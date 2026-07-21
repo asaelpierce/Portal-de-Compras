@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
-export function useSupplyData() {
+export function useSupplyData(filtros = {}) {
   const [pedidos, setPedidos] = useState([])
   const [nfs, setNfs] = useState([])
   const [alertasMulta, setAlertasMulta] = useState([])
@@ -13,21 +13,32 @@ export function useSupplyData() {
     setLoading(true)
     setError(null)
     try {
+      let qPedidos = supabase
+        .from('pedidos_abertos')
+        .select('*')
+        .order('prioridade', { ascending: true })
+        .order('data_embarque', { ascending: true })
+
+      let qNfs = supabase
+        .from('nfs_entrada')
+        .select('*')
+        .order('data_recebimento', { ascending: false })
+
+      // Filtros de data
+      if (filtros.dataInicio) {
+        qPedidos = qPedidos.gte('data_pedido', filtros.dataInicio)
+        qNfs = qNfs.gte('data_recebimento', filtros.dataInicio)
+      }
+      if (filtros.dataFim) {
+        qPedidos = qPedidos.lte('data_pedido', filtros.dataFim)
+        qNfs = qNfs.lte('data_recebimento', filtros.dataFim)
+      }
+
       const [{ data: p, error: ep }, { data: n, error: en }, { data: a }] =
         await Promise.all([
-          supabase
-            .from('pedidos_abertos')
-            .select('*')
-            .order('prioridade', { ascending: true })
-            .order('data_embarque', { ascending: true }),
-          supabase
-            .from('nfs_entrada')
-            .select('*')
-            .order('data_recebimento', { ascending: false }),
-          supabase
-            .from('alertas_multa')
-            .select('*')
-            .order('criado_em', { ascending: false }),
+          qPedidos,
+          qNfs,
+          supabase.from('alertas_multa').select('*').order('criado_em', { ascending: false }),
         ])
 
       if (ep) throw ep
@@ -42,7 +53,7 @@ export function useSupplyData() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [filtros.dataInicio, filtros.dataFim])
 
   useEffect(() => { load() }, [load])
 

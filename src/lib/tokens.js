@@ -1,49 +1,63 @@
+// Design tokens — tema claro Kalenborn
 export const C = {
-  bg:         '#0B0E17',
-  surface:    '#111520',
-  card:       '#161B2E',
-  cardHover:  '#1C2340',
-  border:     '#1E2540',
-  borderL:    '#2A3358',
-  accent:     '#2563EB',
-  accentDim:  '#1E3A8A',
-  accentText: '#60A5FA',
-  danger:     '#EF4444',
-  dangerDim:  '#450A0A',
-  dangerText: '#FCA5A5',
-  warning:    '#F59E0B',
-  warnDim:    '#451A03',
-  warnText:   '#FCD34D',
-  success:    '#10B981',
-  okDim:      '#022C22',
-  okText:     '#6EE7B7',
-  muted:      '#94A3B8',
-  subtle:     '#475569',
-  text:       '#E2E8F0',
-  textStrong: '#F8FAFC',
-  amber:      '#F59E0B',
-  amberDim:   '#451A03',
-  amberText:  '#FCD34D',
+  // Base
+  bg:         '#F5F5F3',
+  surface:    '#FFFFFF',
+  card:       '#FFFFFF',
+  cardHover:  '#F9F9F7',
+  border:     '#E5E5E2',
+  borderL:    '#D0D0CC',
+
+  // Marca Kalenborn
+  brand:      '#1A1A1A',
+  brandDim:   '#2D2D2D',
+  yellow:     '#F5E500',
+  yellowDim:  '#FFF9C4',
+
+  // Accent (azul corporativo)
+  accent:     '#1D4ED8',
+  accentDim:  '#EFF6FF',
+  accentText: '#1D4ED8',
+
+  // Semânticos
+  danger:     '#DC2626',
+  dangerDim:  '#FEF2F2',
+  dangerText: '#DC2626',
+  warning:    '#D97706',
+  warnDim:    '#FFFBEB',
+  warnText:   '#D97706',
+  success:    '#059669',
+  okDim:      '#ECFDF5',
+  okText:     '#059669',
+  amber:      '#D97706',
+  amberDim:   '#FFFBEB',
+  amberText:  '#92400E',
+
+  // Texto
+  text:       '#1A1A1A',
+  textStrong: '#000000',
+  muted:      '#6B7280',
+  subtle:     '#9CA3AF',
 }
 
 export const STATUS_EMBARQUE = {
-  ALERTA:    { color: C.amberText,  bg: C.amberDim,  border: C.amber,   dot: C.amber,   label: 'Verificar embarque' },
-  EM_BREVE:  { color: C.warnText,   bg: C.warnDim,   border: C.warning,  dot: C.warning,  label: 'Embarca em breve' },
-  NO_PRAZO:  { color: C.okText,     bg: C.okDim,     border: C.success,  dot: C.success,  label: 'No prazo' },
-  SEM_DATA:  { color: C.muted,      bg: C.surface,   border: C.borderL,  dot: C.subtle,   label: 'Sem data embarque' },
-  ENTREGUE:  { color: C.okText,     bg: C.okDim,     border: C.success,  dot: C.success,  label: 'Entregue' },
+  ALERTA:    { color: C.amberText, bg: C.amberDim,  border: C.amber,   dot: C.amber,   label: 'Verificar embarque' },
+  EM_BREVE:  { color: C.warnText,  bg: C.warnDim,   border: C.warning, dot: C.warning, label: 'Embarca em breve'   },
+  NO_PRAZO:  { color: C.okText,    bg: C.okDim,     border: C.success, dot: C.success, label: 'No prazo'           },
+  SEM_DATA:  { color: C.muted,     bg: '#F9FAFB',   border: C.border,  dot: C.subtle,  label: 'Sem data embarque'  },
+  ENTREGUE:  { color: C.okText,    bg: C.okDim,     border: C.success, dot: C.success, label: 'Entregue'           },
 }
 
 export const STATUS_ENTREGA = {
-  ATRASADO:  { color: C.dangerText, bg: C.dangerDim, border: C.danger,   dot: C.danger,   label: 'Entrega atrasada' },
-  EM_BREVE:  { color: C.warnText,   bg: C.warnDim,   border: C.warning,  dot: C.warning,  label: 'Entrega em breve' },
-  NO_PRAZO:  { color: C.okText,     bg: C.okDim,     border: C.success,  dot: C.success,  label: 'No prazo' },
-  SEM_DATA:  { color: C.muted,      bg: C.surface,   border: C.borderL,  dot: C.subtle,   label: 'Sem data prevista' },
-  ENTREGUE:  { color: C.okText,     bg: C.okDim,     border: C.success,  dot: C.success,  label: 'Entregue' },
+  ATRASADO:  { color: C.dangerText, bg: C.dangerDim, border: C.danger,  dot: C.danger,  label: 'Atrasado'          },
+  EM_BREVE:  { color: C.warnText,   bg: C.warnDim,   border: C.warning, dot: C.warning, label: 'Vence em breve'    },
+  NO_PRAZO:  { color: C.okText,     bg: C.okDim,     border: C.success, dot: C.success, label: 'No prazo'          },
+  SEM_DATA:  { color: C.muted,      bg: '#F9FAFB',   border: C.border,  dot: C.subtle,  label: 'Sem data prevista' },
+  ENTREGUE:  { color: C.okText,     bg: C.okDim,     border: C.success, dot: C.success, label: 'Entregue'          },
 }
 
 export const SITUACAO_ENTREGA = {
-  NO_PRAZO:   { color: C.okText,     bg: C.okDim,     label: 'Recebido no prazo' },
-  ATRASO:     { color: C.warnText,   bg: C.warnDim,   label: 'Recebido com atraso' },
-  AGUARDANDO: { color: C.muted,      bg: C.surface,   label: 'Aguardando' },
+  NO_PRAZO:   { color: C.okText,    bg: C.okDim,    label: 'Recebido no prazo'   },
+  ATRASO:     { color: C.warnText,  bg: C.warnDim,  label: 'Recebido com atraso' },
+  AGUARDANDO: { color: C.muted,     bg: '#F9FAFB',  label: 'Aguardando'          },
 }
