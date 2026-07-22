@@ -5,6 +5,7 @@ import Pedidos from './components/Pedidos'
 import FollowUp from './components/FollowUp'
 import { NFsView, CruzamentoView } from './components/NFs'
 import { GeradorMulta, AvaliacaoIDF } from './components/MultaIDF'
+import SavingDash from './components/SavingDash'
 import { DateInput } from './components/UI'
 import { C } from './lib/tokens'
 
@@ -14,6 +15,7 @@ const PAGES = [
   { id: 'followup',   label: 'Follow-up',         icon: '🔄' },
   { id: 'nfs',        label: 'NFs recebidas',     icon: '🧾' },
   { id: 'cruzamento', label: 'OC × NF',           icon: '🔗' },
+  { id: 'saving',     label: 'Saving',            icon: '📉' },
   { id: 'multa',      label: 'Multa',             icon: '⚠️' },
   { id: 'idf',        label: 'IDF Fornecedores',  icon: '📈' },
 ]
@@ -40,28 +42,18 @@ export default function App() {
         transition: 'width 0.2s', overflow: 'hidden',
         position: 'sticky', top: 0, height: '100vh',
       }}>
-        {/* Logo */}
         <div style={{
-          padding: sideOpen ? '20px 16px 16px' : '20px 10px 16px',
+          padding: sideOpen ? '18px 16px 14px' : '18px 10px 14px',
           borderBottom: '1px solid rgba(255,255,255,0.1)',
-          display: 'flex', alignItems: 'center', gap: 10,
+          display: 'flex', alignItems: 'center',
         }}>
-          <img
-            src="/logo-branca.png"
-            alt="Kalenborn"
-            style={{ height: 28, objectFit: 'contain', flexShrink: 0, display: sideOpen ? 'block' : 'none' }}
-          />
-          {!sideOpen && (
-            <div style={{
-              width: 36, height: 36, background: '#F5E500', borderRadius: 8,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 16, fontWeight: 800, color: C.brand,
-            }}>K</div>
-          )}
+          {sideOpen
+            ? <img src="/logo-branca.png" alt="Kalenborn" style={{ height: 26, objectFit: 'contain' }} />
+            : <div style={{ width: 36, height: 36, background: '#F5E500', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 800, color: '#1A1A1A' }}>K</div>
+          }
         </div>
 
-        {/* Nav items */}
-        <nav style={{ flex: 1, padding: '12px 0' }}>
+        <nav style={{ flex: 1, padding: '10px 0', overflowY: 'auto' }}>
           {PAGES.map(p => (
             <button key={p.id} onClick={() => setPage(p.id)} style={{
               width: '100%', display: 'flex', alignItems: 'center',
@@ -71,7 +63,7 @@ export default function App() {
               background: page === p.id ? 'rgba(245,229,0,0.15)' : 'transparent',
               color: page === p.id ? '#F5E500' : 'rgba(255,255,255,0.7)',
               borderLeft: page === p.id ? '3px solid #F5E500' : '3px solid transparent',
-              transition: 'all 0.15s',
+              transition: 'all 0.15s', textAlign: 'left',
             }}
             onMouseEnter={e => { if (page !== p.id) e.currentTarget.style.background = 'rgba(255,255,255,0.08)' }}
             onMouseLeave={e => { if (page !== p.id) e.currentTarget.style.background = 'transparent' }}
@@ -82,13 +74,12 @@ export default function App() {
           ))}
         </nav>
 
-        {/* Toggle sidebar */}
         <button onClick={() => setSideOpen(s => !s)} style={{
-          margin: 12, padding: '8px', borderRadius: 8,
+          margin: 10, padding: '7px', borderRadius: 8,
           border: '1px solid rgba(255,255,255,0.15)',
-          background: 'transparent', color: 'rgba(255,255,255,0.5)',
-          cursor: 'pointer', fontSize: 12,
-        }}>{sideOpen ? '← Recolher' : '→'}</button>
+          background: 'transparent', color: 'rgba(255,255,255,0.4)',
+          cursor: 'pointer', fontSize: 11,
+        }}>{sideOpen ? '◀ Recolher' : '▶'}</button>
       </div>
 
       {/* MAIN */}
@@ -97,30 +88,28 @@ export default function App() {
         {/* TOPBAR */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12,
-          padding: '0 24px', height: 56,
+          padding: '0 24px', height: 54,
           background: C.surface, borderBottom: `1px solid ${C.border}`,
           boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
           position: 'sticky', top: 0, zIndex: 10, flexShrink: 0,
         }}>
-          <div style={{ fontSize: 15, fontWeight: 600, color: C.brand }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.brand }}>
             {PAGES.find(p => p.id === page)?.icon} {PAGES.find(p => p.id === page)?.label}
           </div>
 
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-            {/* Filtros de data */}
             <DateInput label="De" value={dataInicio} onChange={setDataInicio} />
             <DateInput label="Até" value={dataFim} onChange={setDataFim} />
-
             {lastSync && (
               <span style={{ fontSize: 11, color: C.muted }}>
                 Sync {lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
               </span>
             )}
             <button onClick={reload} disabled={loading} style={{
-              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px',
-              borderRadius: 7, border: `1px solid ${C.border}`,
-              background: loading ? C.bg : C.brand, color: loading ? C.muted : 'white',
-              fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 500,
+              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
+              borderRadius: 7, border: 'none',
+              background: loading ? C.border : C.brand,
+              color: 'white', fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 500,
             }}>
               <span style={{ display: 'inline-block', animation: loading ? 'spin 0.8s linear infinite' : 'none' }}>↻</span>
               {loading ? 'Carregando…' : 'Atualizar'}
@@ -133,7 +122,7 @@ export default function App() {
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300, flexDirection: 'column', gap: 12 }}>
               <div style={{ width: 36, height: 36, border: `3px solid ${C.border}`, borderTopColor: C.brand, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-              <span style={{ color: C.muted, fontSize: 13 }}>Carregando dados do Sankhya…</span>
+              <span style={{ color: C.muted, fontSize: 13 }}>Carregando dados…</span>
             </div>
           ) : error ? (
             <div style={{ background: C.dangerDim, border: `1px solid ${C.danger}`, borderRadius: 10, padding: 20, color: C.dangerText, fontSize: 13 }}>
@@ -146,6 +135,7 @@ export default function App() {
               {page === 'followup'   && <FollowUp pedidos={pedidos} nfs={nfs} />}
               {page === 'nfs'        && <NFsView nfs={nfs} />}
               {page === 'cruzamento' && <CruzamentoView pedidos={pedidos} nfs={nfs} />}
+              {page === 'saving'     && <SavingDash pedidos={pedidos} />}
               {page === 'multa'      && <GeradorMulta pedidos={pedidos} alertasMulta={alertasMulta} onReload={reload} />}
               {page === 'idf'        && <AvaliacaoIDF pedidos={pedidos} nfs={nfs} />}
             </>
@@ -161,6 +151,8 @@ export default function App() {
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 3px; }
         input[type=date]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+        nav::-webkit-scrollbar { width: 3px; }
+        nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
       `}</style>
     </div>
   )
