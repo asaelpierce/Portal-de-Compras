@@ -7,6 +7,7 @@ import { NFsView, CruzamentoView } from './components/NFs'
 import { GeradorMulta, AvaliacaoIDF } from './components/MultaIDF'
 import SavingDash from './components/SavingDash'
 import Alertas from './components/Alertas'
+import Lembretes from './components/Lembretes'
 import Governanca from './components/Governanca'
 import Recebimentos from './components/Recebimentos'
 import XMLAnalise from './components/XMLAnalise'
@@ -23,6 +24,7 @@ const PAGES = [
   { id: 'nfs',        label: 'NFs recebidas',       icon: '🧾', group: 'Compras' },
   { id: 'recebimentos', label: 'Recebimentos',    icon: '📋', group: 'Compras' },
   { id: 'cruzamento', label: 'OC × NF',             icon: '🔗', group: 'Compras' },
+  { id: 'lembretes',   label: 'Lembretes',           icon: '🔔', group: 'Compras' },
   { id: 'governanca',  label: 'Governança',          icon: '🔍', group: 'Análise' },
   { id: 'saving',     label: 'Compradores',         icon: '👥', group: 'Análise' },
   { id: 'idf',        label: 'IDF Fornecedores',    icon: '📈', group: 'Análise' },
@@ -176,6 +178,7 @@ export default function App() {
               {page === 'nfs'        && <NFsView         nfs={nfs} />}
               {page === 'recebimentos' && <Recebimentos />}
               {page === 'cruzamento' && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
+              {page === 'lembretes'  && <Lembretes pedidos={pedidos} />}
               {page === 'governanca' && <Governanca pedidos={pedidos} />}
               {page === 'saving'     && <SavingDash      pedidos={pedidos} />}
               {page === 'idf'        && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
