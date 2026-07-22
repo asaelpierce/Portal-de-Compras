@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useSupplyData } from './hooks/useSupplyData'
 import Dashboard from './components/Dashboard'
 import Pedidos from './components/Pedidos'
@@ -7,27 +7,29 @@ import { NFsView, CruzamentoView } from './components/NFs'
 import { GeradorMulta, AvaliacaoIDF } from './components/MultaIDF'
 import SavingDash from './components/SavingDash'
 import Alertas from './components/Alertas'
+import EntregaParcial from './components/EntregaParcial'
 import { DateInput } from './components/UI'
 import { C } from './lib/tokens'
 
 const PAGES = [
-  { id: 'dashboard',  label: 'Dashboard',        icon: '📊' },
-  { id: 'alertas',    label: 'Alertas',           icon: '🔔', badge: true },
-  { id: 'pedidos',    label: 'Pedidos em aberto', icon: '📦' },
-  { id: 'followup',   label: 'Follow-up',         icon: '🔄' },
-  { id: 'nfs',        label: 'NFs recebidas',     icon: '🧾' },
-  { id: 'cruzamento', label: 'OC × NF',           icon: '🔗' },
-  { id: 'saving',     label: 'Compradores',       icon: '👥' },
-  { id: 'multa',      label: 'Multa',             icon: '⚠️' },
-  { id: 'idf',        label: 'IDF Fornecedores',  icon: '📈' },
+  { id: 'dashboard',  label: 'Dashboard',          icon: '📊', group: 'Visão Geral' },
+  { id: 'alertas',    label: 'Alertas',             icon: '🔔', group: 'Visão Geral', badge: true },
+  { id: 'pedidos',    label: 'Pedidos em aberto',   icon: '📦', group: 'Compras' },
+  { id: 'followup',   label: 'Follow-up',           icon: '🔄', group: 'Compras' },
+  { id: 'parcial',    label: 'Entrega parcial',      icon: '📊', group: 'Compras' },
+  { id: 'nfs',        label: 'NFs recebidas',       icon: '🧾', group: 'Compras' },
+  { id: 'cruzamento', label: 'OC × NF',             icon: '🔗', group: 'Compras' },
+  { id: 'saving',     label: 'Compradores',         icon: '👥', group: 'Análise' },
+  { id: 'idf',        label: 'IDF Fornecedores',    icon: '📈', group: 'Análise' },
+  { id: 'multa',      label: 'Multa',               icon: '⚠️', group: 'Análise' },
 ]
 
-const hoje     = new Date().toISOString().split('T')[0]
-const inicioAno = '2026-01-01'
+const GROUPS = ['Visão Geral', 'Compras', 'Análise']
+const hoje = new Date().toISOString().split('T')[0]
 
 export default function App() {
-  const [page, setPage]           = useState('dashboard')
-  const [dataInicio, setDataInicio] = useState(inicioAno)
+  const [page, setPage]             = useState('dashboard')
+  const [dataInicio, setDataInicio] = useState('2026-01-01')
   const [dataFim, setDataFim]       = useState(hoje)
   const [sideOpen, setSideOpen]     = useState(true)
 
@@ -35,61 +37,70 @@ export default function App() {
     useSupplyData({ dataInicio, dataFim })
 
   const alertasAtivos = pedidos.filter(p => p.prioridade <= 2).length
+  const parciais = pedidos.filter(p => parseFloat(p.quantidade_entregue) > 0 && parseFloat(p.quantidade_pendente) > 0).length
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
 
-      {/* ── SIDEBAR ── */}
+      {/* SIDEBAR */}
       <aside style={{
         width: sideOpen ? 224 : 64, flexShrink: 0,
         background: C.brand, display: 'flex', flexDirection: 'column',
         transition: 'width 0.25s cubic-bezier(.4,0,.2,1)', overflow: 'hidden',
         position: 'sticky', top: 0, height: '100vh',
       }}>
-        {/* Logo */}
-        <div style={{ padding: sideOpen ? '20px 18px 16px' : '20px 14px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', gap: 10, minHeight: 72 }}>
+        <div style={{ padding: sideOpen ? '20px 18px 16px' : '20px 14px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', minHeight: 72, display: 'flex', alignItems: 'center' }}>
           {sideOpen
-            ? <img src="/logo-branca.png" alt="Kalenborn" style={{ height: 28, objectFit: 'contain', transition: 'opacity 0.2s' }} onError={e => { e.target.style.display='none' }} />
-            : null}
-          <div style={{ width: 36, height: 36, background: '#F5E500', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#1A1A1A', flexShrink: 0, display: sideOpen ? 'none' : 'flex' }}>K</div>
+            ? <img src="/logo-branca.png" alt="Kalenborn" style={{ height: 28, objectFit: 'contain' }} onError={e => e.target.style.display='none'} />
+            : <div style={{ width: 36, height: 36, background: '#F5E500', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 900, color: '#1A1A1A' }}>K</div>
+          }
         </div>
 
-        {/* Seção Supply Chain */}
-        {sideOpen && <div style={{ padding: '14px 18px 4px', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.3)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Supply Chain</div>}
-
-        <nav style={{ flex: 1, padding: '6px 0', overflowY: 'auto', overflowX: 'hidden' }}>
-          {PAGES.map(p => {
-            const active = page === p.id
-            const hasAlert = p.badge && alertasAtivos > 0
+        <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '8px 0' }}>
+          {GROUPS.map(group => {
+            const groupPages = PAGES.filter(p => p.group === group)
             return (
-              <button key={p.id} onClick={() => setPage(p.id)} style={{
-                width: '100%', display: 'flex', alignItems: 'center',
-                gap: 10, padding: sideOpen ? '9px 18px' : '10px',
-                justifyContent: sideOpen ? 'flex-start' : 'center',
-                border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: active ? 600 : 400,
-                background: active ? 'rgba(245,229,0,0.12)' : 'transparent',
-                color: active ? '#F5E500' : 'rgba(255,255,255,0.65)',
-                borderLeft: active ? '3px solid #F5E500' : '3px solid transparent',
-                transition: 'all 0.15s', textAlign: 'left', position: 'relative',
-              }}
-              onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = 'rgba(255,255,255,0.9)' }}
-              onMouseLeave={e => { if (!active) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.65)' } }}
-              >
-                <span style={{ fontSize: 16, flexShrink: 0, lineHeight: 1 }}>{p.icon}</span>
-                {sideOpen && <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</span>}
-                {hasAlert && (
-                  <span style={{ minWidth: 18, height: 18, background: C.danger, borderRadius: 9, fontSize: 10, fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}>
-                    {alertasAtivos > 99 ? '99+' : alertasAtivos}
-                  </span>
+              <div key={group}>
+                {sideOpen && (
+                  <div style={{ padding: '12px 18px 4px', fontSize: 9, fontWeight: 700, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                    {group}
+                  </div>
                 )}
-              </button>
+                {groupPages.map(p => {
+                  const active = page === p.id
+                  const badgeCount = p.badge ? alertasAtivos : p.id === 'parcial' ? parciais : 0
+                  return (
+                    <button key={p.id} onClick={() => setPage(p.id)} style={{
+                      width: '100%', display: 'flex', alignItems: 'center',
+                      gap: 10, padding: sideOpen ? '9px 18px' : '10px',
+                      justifyContent: sideOpen ? 'flex-start' : 'center',
+                      border: 'none', cursor: 'pointer', fontSize: 13,
+                      fontWeight: active ? 600 : 400,
+                      background: active ? 'rgba(245,229,0,0.12)' : 'transparent',
+                      color: active ? '#F5E500' : 'rgba(255,255,255,0.65)',
+                      borderLeft: active ? '3px solid #F5E500' : '3px solid transparent',
+                      transition: 'all 0.15s', textAlign: 'left',
+                    }}
+                    onMouseEnter={e => { if (!active) { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.color='rgba(255,255,255,0.9)' }}}
+                    onMouseLeave={e => { if (!active) { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='rgba(255,255,255,0.65)' }}}
+                    >
+                      <span style={{ fontSize: 15, flexShrink: 0 }}>{p.icon}</span>
+                      {sideOpen && <span style={{ flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.label}</span>}
+                      {badgeCount > 0 && (
+                        <span style={{ minWidth: 18, height: 18, background: p.badge ? C.danger : C.warning, borderRadius: 9, fontSize: 10, fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}>
+                          {badgeCount > 99 ? '99+' : badgeCount}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             )
           })}
         </nav>
 
-        {/* Última sync */}
         {sideOpen && lastSync && (
-          <div style={{ padding: '8px 18px', fontSize: 10, color: 'rgba(255,255,255,0.25)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ padding: '8px 18px', fontSize: 10, color: 'rgba(255,255,255,0.2)', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             Sync {lastSync.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
           </div>
         )}
@@ -100,15 +111,13 @@ export default function App() {
           background: 'transparent', color: 'rgba(255,255,255,0.3)',
           cursor: 'pointer', fontSize: 11, transition: 'all 0.15s',
         }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.6)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'rgba(255,255,255,0.3)' }}
+        onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.color='rgba(255,255,255,0.6)' }}
+        onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='rgba(255,255,255,0.3)' }}
         >{sideOpen ? '◀ Recolher' : '▶'}</button>
       </aside>
 
-      {/* ── MAIN ── */}
+      {/* MAIN */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-
-        {/* TOPBAR */}
         <header style={{
           display: 'flex', alignItems: 'center', gap: 12,
           padding: '0 24px', height: 56,
@@ -122,31 +131,22 @@ export default function App() {
             </div>
             {lastSync && <div style={{ fontSize: 10, color: C.muted }}>Atualizado às {lastSync.toLocaleTimeString('pt-BR')}</div>}
           </div>
-
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
             <DateInput label="De"  value={dataInicio} onChange={setDataInicio} />
             <DateInput label="Até" value={dataFim}    onChange={setDataFim} />
-
             <button onClick={reload} disabled={loading} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px',
               borderRadius: 8, border: 'none',
               background: loading ? C.border : C.brand,
-              color: 'white', fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer',
-              fontWeight: 600, transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.85' }}
-            onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
-            >
-              <span style={{ display: 'inline-block', animation: loading ? 'spin 0.8s linear infinite' : 'none', fontSize: 14 }}>↻</span>
+              color: 'white', fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 600,
+            }}>
+              <span style={{ animation: loading ? 'spin 0.8s linear infinite' : 'none', display: 'inline-block' }}>↻</span>
               {loading ? 'Carregando…' : 'Atualizar'}
             </button>
-
-            {/* Avatar */}
-            <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#F5E500', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: C.brand, flexShrink: 0 }}>K</div>
+            <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#F5E500', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, color: C.brand }}>K</div>
           </div>
         </header>
 
-        {/* CONTENT */}
         <main style={{ flex: 1, overflowY: 'auto', padding: '22px 24px' }}>
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 320, flexDirection: 'column', gap: 16 }}>
@@ -158,19 +158,20 @@ export default function App() {
             </div>
           ) : error ? (
             <div style={{ background: C.dangerDim, border: `1px solid ${C.danger}`, borderRadius: 12, padding: '20px 24px', color: C.dangerText, fontSize: 13 }}>
-              <strong>⚠ Erro de conexão:</strong> {error}
+              <strong>⚠ Erro:</strong> {error}
             </div>
           ) : (
             <>
-              {page === 'dashboard'  && <Dashboard   pedidos={pedidos} nfs={nfs} onVerificarEmbarque={() => setPage('alertas')} />}
-              {page === 'alertas'    && <Alertas      pedidos={pedidos} onReload={reload} />}
-              {page === 'pedidos'    && <Pedidos      pedidos={pedidos} onReload={reload} />}
-              {page === 'followup'   && <FollowUp     pedidos={pedidos} nfs={nfs} />}
-              {page === 'nfs'        && <NFsView      nfs={nfs} />}
-              {page === 'cruzamento' && <CruzamentoView pedidos={pedidos} nfs={nfs} />}
-              {page === 'saving'     && <SavingDash   pedidos={pedidos} />}
-              {page === 'multa'      && <GeradorMulta pedidos={pedidos} alertasMulta={alertasMulta} onReload={reload} />}
-              {page === 'idf'        && <AvaliacaoIDF pedidos={pedidos} nfs={nfs} />}
+              {page === 'dashboard'  && <Dashboard      pedidos={pedidos} nfs={nfs} onVerificarEmbarque={() => setPage('alertas')} />}
+              {page === 'alertas'    && <Alertas         pedidos={pedidos} onReload={reload} />}
+              {page === 'pedidos'    && <Pedidos         pedidos={pedidos} onReload={reload} />}
+              {page === 'followup'   && <FollowUp        pedidos={pedidos} nfs={nfs} />}
+              {page === 'parcial'    && <EntregaParcial  pedidos={pedidos} />}
+              {page === 'nfs'        && <NFsView         nfs={nfs} />}
+              {page === 'cruzamento' && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
+              {page === 'saving'     && <SavingDash      pedidos={pedidos} />}
+              {page === 'idf'        && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
+              {page === 'multa'      && <GeradorMulta    pedidos={pedidos} alertasMulta={alertasMulta} onReload={reload} />}
             </>
           )}
         </main>
@@ -187,8 +188,9 @@ export default function App() {
         nav::-webkit-scrollbar { width: 3px; }
         nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); }
         input[type=date]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.5; }
-        input[type=date]::-webkit-calendar-picker-indicator:hover { opacity: 0.9; }
-        select { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239CA3AF'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px !important; }
+        select { -webkit-appearance: none; appearance: none;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239CA3AF'/%3E%3C/svg%3E");
+          background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px !important; }
       `}</style>
     </div>
   )
