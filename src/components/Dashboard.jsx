@@ -23,8 +23,90 @@ function AnimNum({ value }) {
 }
 
 // ── Painel lateral de detalhe dos KPIs ────────────────────────────────────
+function PedidoCard({ grupo }) {
+  const [aberto, setAberto] = useState(false)
+  const { itens } = grupo
+  const primeiro = itens[0]
+  const diasEnt  = primeiro._diasEntrega
+  const cor      = diasEnt > 0 ? C.danger : diasEnt > -3 ? C.warning : C.success
+  const valorTotal = itens.reduce((s, p) => s + (parseFloat(p.valor_item) || 0), 0)
+  const qtdTotal   = itens.reduce((s, p) => s + (parseFloat(p.quantidade_pendente) || 0), 0)
+
+  return (
+    <div style={{ borderBottom: `1px solid ${C.border}` }}>
+      {/* Linha do pedido */}
+      <div
+        onClick={() => itens.length > 1 && setAberto(a => !a)}
+        style={{ padding: '12px 20px', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: itens.length > 1 ? 'pointer' : 'default', background: aberto ? '#F0F4FF' : C.surface, transition: 'background 0.1s' }}
+        onMouseEnter={e => { if (itens.length > 1) e.currentTarget.style.background = '#F5F7FF' }}
+        onMouseLeave={e => { e.currentTarget.style.background = aberto ? '#F0F4FF' : C.surface }}
+      >
+        {itens.length > 1 && (
+          <span style={{ fontSize: 10, color: C.muted, marginTop: 3, flexShrink: 0, transition: 'transform 0.15s', display: 'inline-block', transform: aberto ? 'rotate(90deg)' : 'none' }}>▶</span>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.brand, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ color: C.accent }}>#{primeiro.numero_pedido}</span>
+            {primeiro.comprador && !primeiro.comprador.includes('identificado') && (
+              <span style={{ fontSize: 11, color: CORES_COMP[primeiro.comprador] || C.muted, fontWeight: 500 }}>{primeiro.comprador.split(' ')[0]}</span>
+            )}
+            {itens.length > 1 && (
+              <span style={{ fontSize: 10, background: C.accentDim, color: C.accentText, padding: '1px 6px', borderRadius: 10, fontWeight: 600 }}>{itens.length} itens</span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: C.brand, margin: '2px 0' }}>{primeiro.fornecedor}</div>
+          {itens.length === 1 && (
+            <div style={{ fontSize: 11, color: C.muted }}>{primeiro.descricao_produto}</div>
+          )}
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+            Qtd pendente: <strong>{fmtInt(qtdTotal)}</strong> ·
+            Entrega: <strong>{fmtDate(primeiro.data_prevista_entrega)}</strong>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: cor }}>
+            {diasEnt > 0 ? `${diasEnt}d atrasado` : diasEnt === 0 ? 'Hoje' : `${Math.abs(diasEnt)}d restam`}
+          </div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{fmtCurrency(valorTotal)}</div>
+        </div>
+      </div>
+
+      {/* Itens expandidos */}
+      {aberto && (
+        <div style={{ background: '#F8FAFF', borderTop: `1px dashed ${C.border}` }}>
+          {itens.map((it, j) => (
+            <div key={j} style={{ padding: '8px 20px 8px 36px', borderBottom: j < itens.length - 1 ? `1px solid ${C.border}88` : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 12, color: C.brand, fontWeight: 500 }}>{it.descricao_produto}</div>
+                <div style={{ fontSize: 11, color: C.muted }}>Cód. {it.codigo_produto} · Qtd: {fmtInt(it.quantidade_pendente)}</div>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: C.muted }}>{fmtCurrency(it.valor_item)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SlidePanel({ titulo, pedidos, onClose }) {
   if (!pedidos) return null
+
+  // Agrupa por número de pedido
+  const grupos = useMemo(() => {
+    const map = {}
+    pedidos.forEach(p => {
+      const k = String(p.numero_pedido)
+      if (!map[k]) map[k] = { numero_pedido: p.numero_pedido, itens: [] }
+      map[k].itens.push(p)
+    })
+    return Object.values(map).sort((a, b) => {
+      const dA = a.itens[0]?._diasEntrega ?? 0
+      const dB = b.itens[0]?._diasEntrega ?? 0
+      return dB - dA
+    })
+  }, [pedidos])
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex' }}>
       <div onClick={onClose} style={{ flex: 1, background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(2px)' }} />
@@ -34,40 +116,16 @@ function SlidePanel({ titulo, pedidos, onClose }) {
         animation: 'slideIn 0.2s ease',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: C.brand }}>{titulo}</div>
+          <div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.brand }}>{titulo}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{grupos.length} pedidos · clique para ver os itens</div>
+          </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: C.muted, lineHeight: 1 }}>×</button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 0' }}>
-          {pedidos.length === 0
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          {grupos.length === 0
             ? <div style={{ textAlign: 'center', padding: 40, color: C.subtle }}>Nenhum pedido neste grupo</div>
-            : pedidos.map((p, i) => {
-              const dias = p._diasEntrega
-              const cor = dias > 0 ? C.danger : dias > -3 ? C.warning : C.success
-              return (
-                <div key={i} style={{ padding: '12px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.brand }}>
-                      Pedido <span style={{ color: C.accent }}>#{p.numero_pedido}</span>
-                      {p.comprador && !p.comprador.includes('identificado') && (
-                        <span style={{ marginLeft: 8, fontSize: 11, color: CORES_COMP[p.comprador] || C.muted, fontWeight: 500 }}>{p.comprador.split(' ')[0]}</span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: 12, color: C.brand, margin: '2px 0' }}>{p.fornecedor}</div>
-                    <div style={{ fontSize: 11, color: C.muted }}>{p.descricao_produto}</div>
-                    <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                      Qtd pendente: <strong>{fmtInt(p.quantidade_pendente)}</strong> ·
-                      Entrega prevista: <strong>{fmtDate(p.data_prevista_entrega)}</strong>
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: cor }}>
-                      {dias > 0 ? `${dias}d atrasado` : dias === 0 ? 'Hoje' : `${Math.abs(dias)}d restam`}
-                    </div>
-                    <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{fmtCurrency(p.valor_item)}</div>
-                  </div>
-                </div>
-              )
-            })
+            : grupos.map((g, i) => <PedidoCard key={i} grupo={g} />)
           }
         </div>
       </div>
