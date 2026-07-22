@@ -7,6 +7,7 @@ import { NFsView, CruzamentoView } from './components/NFs'
 import { GeradorMulta, AvaliacaoIDF } from './components/MultaIDF'
 import SavingDash from './components/SavingDash'
 import Alertas from './components/Alertas'
+import Recebimentos from './components/Recebimentos'
 import XMLAnalise from './components/XMLAnalise'
 import EntregaParcial from './components/EntregaParcial'
 import { DateInput } from './components/UI'
@@ -19,6 +20,7 @@ const PAGES = [
   { id: 'followup',   label: 'Follow-up',           icon: '🔄', group: 'Compras' },
   { id: 'parcial',    label: 'Entrega parcial',      icon: '📊', group: 'Compras' },
   { id: 'nfs',        label: 'NFs recebidas',       icon: '🧾', group: 'Compras' },
+  { id: 'recebimentos', label: 'Recebimentos',    icon: '📋', group: 'Compras' },
   { id: 'cruzamento', label: 'OC × NF',             icon: '🔗', group: 'Compras' },
   { id: 'saving',     label: 'Compradores',         icon: '👥', group: 'Análise' },
   { id: 'idf',        label: 'IDF Fornecedores',    icon: '📈', group: 'Análise' },
@@ -170,6 +172,7 @@ export default function App() {
               {page === 'followup'   && <FollowUp        pedidos={pedidos} nfs={nfs} />}
               {page === 'parcial'    && <EntregaParcial  pedidos={pedidos} />}
               {page === 'nfs'        && <NFsView         nfs={nfs} />}
+              {page === 'recebimentos' && <Recebimentos />}
               {page === 'cruzamento' && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
               {page === 'saving'     && <SavingDash      pedidos={pedidos} />}
               {page === 'idf'        && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
