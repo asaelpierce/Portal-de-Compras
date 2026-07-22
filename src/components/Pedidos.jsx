@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Card, SearchInput, Select, Badge, Ellipsis, Pill, ModalMulta } from './UI'
+import { Card, CardTitle, SearchInput, Select, Badge, Ellipsis, Pill, ModalMulta } from './UI'
 import { C, STATUS_EMBARQUE, STATUS_ENTREGA } from '../lib/tokens'
 import { fmtDate, fmtCurrency, fmtInt, diasDiferenca, statusEmbarque, statusEntrega } from '../lib/utils'
 import { supabase } from '../lib/supabase'
@@ -18,12 +18,11 @@ function CompradorChip({ nome }) {
   )
 }
 
-// Coluna de atraso — clara e intuitiva
 function AtrasoChip({ dias }) {
   if (dias === null || dias === undefined) return <span style={{ color: C.subtle }}>—</span>
   const d = Math.round(dias)
   if (d > 0) return (
-    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: C.dangerDim, color: C.danger, border: `1px solid ${C.danger}44`, whiteSpace: 'nowrap' }}>
+    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: C.dangerDim, color: C.danger, whiteSpace: 'nowrap' }}>
       ⚠ {d}d atrasado
     </span>
   )
@@ -42,11 +41,12 @@ function AtrasoChip({ dias }) {
   )
 }
 
-// Aba Calendário de embarques
+// ── CALENDÁRIO DE EMBARQUES ─────────────────────────────────────────────────
 function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
   const hoje = new Date()
   const anoMes = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
   const [mes, setMes] = useState(anoMes)
+  const [diaSelected, setDiaSelected] = useState(null)
 
   const diasDoMes = useMemo(() => {
     const [y, m] = mes.split('-').map(Number)
@@ -72,6 +72,7 @@ function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
     const [y, m] = mes.split('-').map(Number)
     const dt = new Date(y, m - 1 + d, 1)
     setMes(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`)
+    setDiaSelected(null)
   }
 
   const semanas = useMemo(() => {
@@ -84,20 +85,20 @@ function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
     return rows
   }, [diasDoMes])
 
-  const [diaSelected, setDiaSelected] = useState(null)
   const pedidosDia = diaSelected
     ? embarquesPorDia[`${diasDoMes.ano}-${String(diasDoMes.mes).padStart(2, '0')}-${String(diaSelected).padStart(2, '0')}`] || []
     : []
 
   const nomesMes = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+  const hojeKey = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-${String(hoje.getDate()).padStart(2,'0')}`
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 14, alignItems: 'start' }}>
       <Card>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <button onClick={() => navMes(-1)} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '4px 12px', cursor: 'pointer', fontSize: 14, color: C.brand }}>‹</button>
+          <button onClick={() => navMes(-1)} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '4px 14px', cursor: 'pointer', fontSize: 16, color: C.brand }}>‹</button>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.brand }}>{nomesMes[diasDoMes.mes - 1]} {diasDoMes.ano}</div>
-          <button onClick={() => navMes(1)}  style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '4px 12px', cursor: 'pointer', fontSize: 14, color: C.brand }}>›</button>
+          <button onClick={() => navMes(1)}  style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '4px 14px', cursor: 'pointer', fontSize: 16, color: C.brand }}>›</button>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -109,18 +110,18 @@ function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
             {semanas.map((sem, si) => (
               <tr key={si}>
                 {sem.map((dia, di) => {
-                  if (!dia) return <td key={di} />
+                  if (!dia) return <td key={di} style={{ padding: 3 }} />
                   const key = `${diasDoMes.ano}-${String(diasDoMes.mes).padStart(2,'0')}-${String(dia).padStart(2,'0')}`
                   const itens = embarquesPorDia[key] || []
-                  const isHoje = key === `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-${String(hoje.getDate()).padStart(2,'0')}`
+                  const isHoje = key === hojeKey
                   const isSel = diaSelected === dia
-                  const passado = new Date(key) < new Date(hoje.toDateString())
+                  const passado = key < hojeKey
                   const temItens = itens.length > 0
                   return (
                     <td key={di} onClick={() => temItens && setDiaSelected(isSel ? null : dia)}
                       style={{ padding: 3, textAlign: 'center', verticalAlign: 'top', cursor: temItens ? 'pointer' : 'default' }}>
                       <div style={{
-                        borderRadius: 8, padding: '6px 4px', minHeight: 52, position: 'relative',
+                        borderRadius: 8, padding: '6px 4px', minHeight: 52,
                         background: isSel ? C.accentDim : isHoje ? '#F0FDF4' : temItens ? (passado ? C.dangerDim : C.warnDim) : 'transparent',
                         border: isSel ? `2px solid ${C.accent}` : isHoje ? `2px solid ${C.success}` : temItens ? `1px solid ${passado ? C.danger : C.warning}44` : '1px solid transparent',
                         transition: 'all 0.15s',
@@ -128,8 +129,8 @@ function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
                         <div style={{ fontSize: 13, fontWeight: isHoje ? 800 : 500, color: isSel ? C.accentText : isHoje ? C.success : C.brand }}>{dia}</div>
                         {temItens && (
                           <div style={{ marginTop: 2 }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: passado ? C.danger : C.warning }}>{itens.length}</div>
-                            <div style={{ fontSize: 9, color: passado ? C.danger : C.warning }}>{itens.length === 1 ? 'embarq.' : 'embarqs.'}</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: passado ? C.danger : C.warning }}>{itens.length}</div>
+                            <div style={{ fontSize: 9, color: passado ? C.danger : C.warning }}>emb.</div>
                           </div>
                         )}
                       </div>
@@ -147,32 +148,27 @@ function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
         </div>
       </Card>
 
-      {/* Painel do dia selecionado */}
-      <Card style={{ minHeight: 200 }}>
+      {/* Painel do dia */}
+      <Card>
         {diaSelected ? (
           <>
             <CardTitle>{pedidosDia.length} embarque{pedidosDia.length !== 1 ? 's' : ''} em {String(diaSelected).padStart(2,'0')}/{String(diasDoMes.mes).padStart(2,'0')}/{diasDoMes.ano}</CardTitle>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {pedidosDia.map((p, i) => {
-                const passado = new Date(p.data_embarque) < new Date(hoje.toDateString())
+                const key = `${diasDoMes.ano}-${String(diasDoMes.mes).padStart(2,'0')}-${String(diaSelected).padStart(2,'0')}`
+                const passado = key < hojeKey
                 return (
                   <div key={i} style={{ padding: '12px 14px', borderRadius: 10, background: passado ? C.dangerDim : C.warnDim, border: `1px solid ${passado ? C.danger : C.warning}44` }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.brand }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.brand, marginBottom: 4 }}>
                       Pedido <span style={{ color: C.accent }}>#{p.numero_pedido}</span>
-                      <CompradorChip nome={p.comprador} />
+                      {' '}<CompradorChip nome={p.comprador} />
                     </div>
-                    <div style={{ fontSize: 12, color: C.brand, margin: '3px 0' }}>{p.fornecedor}</div>
+                    <div style={{ fontSize: 12, color: C.brand, marginBottom: 2 }}>{p.fornecedor}</div>
                     <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>{p.descricao_produto} · Qtd: {fmtInt(p.quantidade_pendente)}</div>
-                    {passado && (
-                      <button onClick={() => onConfirmarEmbarque(p)} style={{
-                        width: '100%', padding: '7px', borderRadius: 7,
-                        border: `1px solid ${C.success}`, background: C.okDim,
-                        color: C.okText, fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                      }}>✓ Confirmar embarque</button>
-                    )}
-                    {!passado && (
-                      <div style={{ fontSize: 11, color: C.warnText, fontWeight: 500 }}>📅 Embarque programado</div>
-                    )}
+                    {passado
+                      ? <button onClick={() => onConfirmarEmbarque(p)} style={{ width: '100%', padding: '7px', borderRadius: 7, border: `1px solid ${C.success}`, background: C.okDim, color: C.okText, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>✓ Confirmar embarque</button>
+                      : <div style={{ fontSize: 11, color: C.warnText, fontWeight: 500 }}>📅 Embarque programado</div>
+                    }
                   </div>
                 )
               })}
@@ -189,16 +185,17 @@ function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
   )
 }
 
+// ── PRINCIPAL ───────────────────────────────────────────────────────────────
 export default function Pedidos({ pedidos, onReload }) {
-  const [search, setSearch]           = useState('')
+  const [search, setSearch]               = useState('')
   const [filtroEntrega, setFiltroEntrega] = useState('')
   const [filtroEmbarque, setFiltroEmbarque] = useState('')
-  const [filtroForn, setFiltroForn]   = useState('')
-  const [filtroComp, setFiltroComp]   = useState('')
-  const [modalPedido, setModalPedido] = useState(null)
-  const [abaAtiva, setAbaAtiva]       = useState('lista')
-  const [confirmando, setConfirmando] = useState(null)
-  const [obsConf, setObsConf]         = useState('')
+  const [filtroForn, setFiltroForn]       = useState('')
+  const [filtroComp, setFiltroComp]       = useState('')
+  const [modalPedido, setModalPedido]     = useState(null)
+  const [abaAtiva, setAbaAtiva]           = useState('lista')
+  const [confirmando, setConfirmando]     = useState(null)
+  const [obsConf, setObsConf]             = useState('')
 
   const fornecedores = useMemo(() => [...new Set(pedidos.map(p => p.fornecedor).filter(Boolean))].sort(), [pedidos])
   const compradores  = useMemo(() => [...new Set(pedidos.map(p => p.comprador).filter(Boolean))].sort(), [pedidos])
@@ -222,6 +219,22 @@ export default function Pedidos({ pedidos, onReload }) {
     })
   }, [pedidos, search, filtroEntrega, filtroEmbarque, filtroForn, filtroComp])
 
+  // Ranking de atrasos por fornecedor — baseado em entrega fora do prazo
+  const rankingAtrasos = useMemo(() => {
+    const map = {}
+    pedidos.forEach(p => {
+      const st = statusEntrega(p.data_prevista_entrega, p.quantidade_pendente)
+      if (st !== 'ATRASADO') return
+      const f = p.fornecedor || '—'
+      if (!map[f]) map[f] = { fornecedor: f, itens: 0, diasTotal: 0, maiorAtraso: 0 }
+      map[f].itens++
+      const d = Math.abs(diasDiferenca(p.data_prevista_entrega) || 0)
+      map[f].diasTotal += d
+      if (d > map[f].maiorAtraso) map[f].maiorAtraso = d
+    })
+    return Object.values(map).sort((a, b) => b.itens - a.itens).slice(0, 8)
+  }, [pedidos])
+
   const alertas   = rows.filter(r => r._stEmbarque === 'ALERTA').length
   const atrasados = rows.filter(r => r._stEntrega  === 'ATRASADO').length
 
@@ -237,9 +250,7 @@ export default function Pedidos({ pedidos, onReload }) {
     onReload()
   }
 
-  const handleConfirmarEmbarque = (pedido) => setConfirmando(pedido)
-
-  const { CardTitle } = { CardTitle: ({ children }) => <div style={{ fontSize: 14, fontWeight: 700, color: C.brand, marginBottom: 14 }}>{children}</div> }
+  const maxItens = Math.max(...rankingAtrasos.map(r => r.itens), 1)
 
   return (
     <>
@@ -251,9 +262,9 @@ export default function Pedidos({ pedidos, onReload }) {
           <div style={{ background: C.surface, borderRadius: 16, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${C.border}` }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: C.brand, marginBottom: 4 }}>✓ Confirmar embarque</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Pedido #{confirmando.numero_pedido} · {confirmando.fornecedor}</div>
-            <div style={{ background: C.okDim, border: `1px solid ${C.success}44`, borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: C.brand }}>
+            <div style={{ background: C.okDim, border: `1px solid ${C.success}44`, borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12 }}>
               <div>Produto: <strong>{confirmando.descricao_produto}</strong></div>
-              <div>Data de embarque: <strong>{fmtDate(confirmando.data_embarque)}</strong></div>
+              <div>Data embarque: <strong>{fmtDate(confirmando.data_embarque)}</strong></div>
               <div>Qtd pendente: <strong>{fmtInt(confirmando.quantidade_pendente)}</strong></div>
             </div>
             <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Observação (opcional)</label>
@@ -270,7 +281,11 @@ export default function Pedidos({ pedidos, onReload }) {
 
       {/* Abas */}
       <div style={{ display: 'flex', gap: 2, borderBottom: `1px solid ${C.border}`, marginBottom: 2 }}>
-        {[['lista','📋 Lista de pedidos'], ['calendario','📅 Calendário de embarques']].map(([id, label]) => (
+        {[
+          ['lista',      '📋 Lista de pedidos'],
+          ['calendario', '📅 Calendário de embarques'],
+          ['atrasos',    '📊 Ranking de atrasos'],
+        ].map(([id, label]) => (
           <button key={id} onClick={() => setAbaAtiva(id)} style={{
             padding: '9px 18px', border: 'none', cursor: 'pointer', fontSize: 13,
             background: 'transparent', fontWeight: abaAtiva === id ? 600 : 400,
@@ -281,10 +296,90 @@ export default function Pedidos({ pedidos, onReload }) {
         ))}
       </div>
 
+      {/* CALENDÁRIO */}
       {abaAtiva === 'calendario' && (
-        <CalendarioEmbarques pedidos={pedidos} onConfirmarEmbarque={handleConfirmarEmbarque} />
+        <CalendarioEmbarques pedidos={pedidos} onConfirmarEmbarque={setConfirmando} />
       )}
 
+      {/* RANKING DE ATRASOS POR FORNECEDOR */}
+      {abaAtiva === 'atrasos' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>
+          <Card>
+            <CardTitle>Quem mais atrasou — entrega fora do prazo</CardTitle>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: -12, marginBottom: 16 }}>Baseado na data prevista de entrega vs. data atual</div>
+            {rankingAtrasos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: C.subtle }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>🎉</div>
+                <div>Nenhum atraso de entrega registrado</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {rankingAtrasos.map((r, i) => (
+                  <div key={i}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: C.muted, minWidth: 18 }}>{i + 1}.</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: C.brand, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.fornecedor}</span>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.danger }}>{r.itens} {r.itens === 1 ? 'item' : 'itens'}</span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ flex: 1, height: 24, background: '#FEE2E2', borderRadius: 5, overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%', background: `linear-gradient(90deg, #DC2626, #FF6B6B)`,
+                          width: `${Math.round(r.itens / maxItens * 100)}%`,
+                          borderRadius: 5, display: 'flex', alignItems: 'center', paddingLeft: 8,
+                          transition: 'width 0.7s ease',
+                        }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: 'white', whiteSpace: 'nowrap' }}>{r.itens} {r.itens === 1 ? 'item' : 'itens'}</span>
+                        </div>
+                      </div>
+                      <div style={{ flexShrink: 0, fontSize: 11, color: C.muted, minWidth: 100, textAlign: 'right' }}>
+                        maior: <strong style={{ color: C.danger }}>{r.maiorAtraso}d</strong> · média: <strong>{Math.round(r.diasTotal / r.itens)}d</strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* Tabela detalhada */}
+          <Card>
+            <CardTitle>Detalhamento por fornecedor</CardTitle>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead>
+                  <tr style={{ background: '#F9FAFB' }}>
+                    {['Fornecedor', 'Itens atrasados', 'Maior atraso', 'Atraso médio'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: C.muted, fontWeight: 600, fontSize: 10, textTransform: 'uppercase', borderBottom: `2px solid ${C.border}` }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankingAtrasos.length === 0
+                    ? <tr><td colSpan={4} style={{ padding: 24, textAlign: 'center', color: C.subtle }}>Sem atrasos</td></tr>
+                    : rankingAtrasos.map((r, i) => (
+                      <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#FAFAFA' : C.surface }}>
+                        <td style={{ padding: '8px 10px', fontWeight: 500, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.fornecedor}>{r.fornecedor}</td>
+                        <td style={{ padding: '8px 10px' }}>
+                          <span style={{ background: C.dangerDim, color: C.dangerText, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{r.itens}</span>
+                        </td>
+                        <td style={{ padding: '8px 10px', color: C.danger, fontWeight: 700 }}>{r.maiorAtraso}d</td>
+                        <td style={{ padding: '8px 10px', color: C.muted }}>{Math.round(r.diasTotal / r.itens)}d</td>
+                      </tr>
+                    ))
+                  }
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* LISTA DE PEDIDOS */}
       {abaAtiva === 'lista' && (
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
@@ -337,8 +432,7 @@ export default function Pedidos({ pedidos, onReload }) {
                   : rows.map((p, i) => (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 1 ? '#FAFAFA' : C.surface }}
                       onMouseEnter={e => e.currentTarget.style.background = '#F0F4FF'}
-                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 1 ? '#FAFAFA' : C.surface}
-                    >
+                      onMouseLeave={e => e.currentTarget.style.background = i % 2 === 1 ? '#FAFAFA' : C.surface}>
                       <td style={{ padding: '9px 10px', fontWeight: 700, color: C.accent }}>{p.numero_pedido}</td>
                       <td style={{ padding: '9px 10px' }}><CompradorChip nome={p.comprador} /></td>
                       <td style={{ padding: '9px 10px' }}><Ellipsis maxWidth={160}>{p.fornecedor}</Ellipsis></td>
@@ -362,10 +456,7 @@ export default function Pedidos({ pedidos, onReload }) {
                       <td style={{ padding: '9px 10px', fontWeight: 600 }}>{fmtCurrency(p.valor_item)}</td>
                       <td style={{ padding: '9px 10px' }}>
                         {p.data_embarque && (
-                          <button onClick={() => handleConfirmarEmbarque(p)} style={{
-                            padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.success}`,
-                            background: C.okDim, color: C.okText, fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
-                          }}>✓ Embarcou</button>
+                          <button onClick={() => setConfirmando(p)} style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.success}`, background: C.okDim, color: C.okText, fontSize: 11, cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap' }}>✓ Embarcou</button>
                         )}
                       </td>
                     </tr>
