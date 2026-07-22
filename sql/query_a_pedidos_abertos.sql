@@ -1,10 +1,13 @@
 /*
-  QUERY A — PEDIDOS EM ABERTO
+  QUERY A -- PEDIDOS DE COMPRA EM ABERTO
   Sankhya / Oracle
-  TOPs validas: 2103, 2114, 2122, 2125, 2126,
-                2300, 2301, 2302, 2303, 2304, 2305, 2306, 2413
-  Removido: TIPMOV = 'O' e CODNAT = 510101
-  Substituido por: CODTIPOPER IN (lista de TOPs de compra)
+
+  FILTRO CORRETO:
+  - TIPMOV = 'O'  => pedido de compra (tem datas de embarque e entrega)
+  - NAO usar CODTIPOPER aqui — esse filtro e usado na Query B (notas de entrada)
+  - A logica e: pedido de compra (TIPMOV='O') gera nota de entrada (TIPMOV='E')
+
+  Criterio de "em aberto": quantidade pendente > 0
 */
 SELECT
     CAB.NUMNOTA                                         AS NUMERO_PEDIDO,
@@ -29,7 +32,15 @@ SELECT
         WHEN CAB.AD_DTEMBARQUE IS NOT NULL AND CAB.AD_DTEMBARQUE <= SYSDATE + 3 THEN 3
         WHEN CAB.DTPREVENT     IS NOT NULL AND CAB.DTPREVENT     <= SYSDATE + 3 THEN 4
         ELSE 5
-    END                                                 AS PRIORIDADE
+    END                                                 AS PRIORIDADE,
+    CAB.CODVEND                                         AS COD_COMPRADOR,
+    CASE CAB.CODVEND
+        WHEN 16 THEN 'Leonardo Henriques'
+        WHEN 31 THEN 'Franciele Dias'
+        ELSE 'Nao identificado'
+    END                                                 AS COMPRADOR,
+    NVL(CAB.VLRDESCTOT, 0)                            AS VLR_DESCONTO,
+    NVL(CAB.PERCDESC, 0)                              AS PERC_DESC
 FROM
     TGFCAB CAB
     INNER JOIN TGFITE ITE ON ITE.NUNOTA  = CAB.NUNOTA
@@ -37,11 +48,7 @@ FROM
     INNER JOIN TGFPAR PAR ON PAR.CODPARC = CAB.CODPARC
     LEFT  JOIN TCSPRJ PRJ ON PRJ.CODPROJ = CAB.CODPROJ
 WHERE
-    CAB.CODTIPOPER IN (
-        2103, 2114, 2122, 2125, 2126,
-        2300, 2301, 2302, 2303, 2304, 2305,
-        2306, 2413
-    )
+    CAB.TIPMOV      = 'O'
     AND CAB.STATUSNOTA = 'L'
     AND CAB.DTNEG     >= TO_DATE('2026-01-01', 'YYYY-MM-DD')
     AND ITE.CODPROD   NOT IN (2999, 3000)
