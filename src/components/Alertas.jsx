@@ -4,49 +4,79 @@ import { C } from '../lib/tokens'
 import { fmtDate, fmtCurrency, statusEmbarque, statusEntrega, diasDiferenca } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 
+const CORES_COMP = { 'Leonardo Henriques': '#1D4ED8', 'Franciele Dias': '#059669' }
+
 const TIPOS = {
-  EMBARQUE_VENCIDO:  { icon: '🚚', cor: C.amber,   titulo: 'Embarque vencido — sem confirmação',       acao: 'Verificar com fornecedor' },
-  ENTREGA_ATRASADA:  { icon: '🔴', cor: C.danger,  titulo: 'Entrega atrasada',                        acao: 'Acionar comprador' },
-  VENCE_3_DIAS:      { icon: '⏰', cor: C.warning, titulo: 'Entrega vence em até 3 dias',              acao: 'Confirmar status' },
-  SEM_DATA_EMBARQUE: { icon: '📋', cor: C.subtle,  titulo: 'Pedido sem data de embarque cadastrada',   acao: 'Atualizar no Sankhya' },
-  ALTO_VALOR_ATRASO: { icon: '💰', cor: C.danger,  titulo: 'Alto valor em atraso',                    acao: 'Prioridade máxima' },
+  ALTO_VALOR_ATRASO:  { icon: '💰', cor: '#DC2626', titulo: 'Alto valor em atraso (>R$50k)',        acao: 'Prioridade máxima',       prio: 0 },
+  EMBARQUE_VENCIDO:   { icon: '🚚', cor: '#D97706', titulo: 'Data de embarque vencida',             acao: 'Verificar com fornecedor', prio: 1 },
+  ENTREGA_ATRASADA:   { icon: '🔴', cor: '#DC2626', titulo: 'Entrega atrasada',                     acao: 'Acionar comprador',        prio: 2 },
+  VENCE_3_DIAS:       { icon: '⏰', cor: '#D97706', titulo: 'Entrega vence em até 3 dias',          acao: 'Confirmar status',         prio: 3 },
+  SEM_DATA_PEDIDO:    { icon: '📋', cor: '#6B7280', titulo: 'Pedido >7 dias sem datas cadastradas', acao: 'Atualizar no Sankhya',     prio: 4 },
 }
 
 export default function Alertas({ pedidos, onReload }) {
   const [resolvendo, setResolvendo] = useState(null)
   const [obs, setObs] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('')
 
   const alertas = useMemo(() => {
     const list = []
-    pedidos.forEach(p => {
-      const stEmb  = statusEmbarque(p.data_embarque, p.quantidade_pendente)
-      const stEnt  = statusEntrega(p.data_prevista_entrega, p.quantidade_pendente)
-      const diasAtr = diasDiferenca(p.data_prevista_entrega)
-      const valor  = parseFloat(p.valor_total_pedido) || 0
+    const hoje = new Date()
 
-      if (stEmb === 'ALERTA') {
-        const tipo = valor > 50000 ? 'ALTO_VALOR_ATRASO' : 'EMBARQUE_VENCIDO'
-        list.push({ ...TIPOS[tipo], tipo, pedido: p, diasAtraso: diasDiferenca(p.data_embarque), valor })
-      } else if (stEnt === 'ATRASADO') {
-        const tipo = valor > 50000 ? 'ALTO_VALOR_ATRASO' : 'ENTREGA_ATRASADA'
-        list.push({ ...TIPOS[tipo], tipo, pedido: p, diasAtraso: diasAtr, valor })
-      } else if (stEnt === 'EM_BREVE') {
-        list.push({ ...TIPOS.VENCE_3_DIAS, tipo: 'VENCE_3_DIAS', pedido: p, diasAtraso: diasAtr, valor })
-      } else if (!p.data_embarque && parseFloat(p.quantidade_pendente) > 0) {
-        list.push({ ...TIPOS.SEM_DATA_EMBARQUE, tipo: 'SEM_DATA_EMBARQUE', pedido: p, diasAtraso: null, valor })
+    pedidos.forEach(p => {
+      const stEmb    = statusEmbarque(p.data_embarque, p.quantidade_pendente)
+      const stEnt    = statusEntrega(p.data_prevista_entrega, p.quantidade_pendente)
+      const diasAtrEnt = diasDiferenca(p.data_prevista_entrega)
+      const diasAtrEmb = diasDiferenca(p.data_embarque)
+      const valor    = parseFloat(p.valor_total_pedido) || 0
+      const diasPedido = p.data_pedido ? Math.floor((hoje - new Date(p.data_pedido)) / (1000*60*60*24)) : 0
+
+      // Alto valor atrasado (embarque ou entrega)
+      if (valor > 50000 && (stEmb === 'ALERTA' || stEnt === 'ATRASADO')) {
+        list.push({ ...TIPOS.ALTO_VALOR_ATRASO, tipo: 'ALTO_VALOR_ATRASO', pedido: p, diasAtraso: Math.max(diasAtrEnt || 0, diasAtrEmb || 0), valor })
+        return
+      }
+
+      // Embarque vencido (não conta se já tem entrega atrasada — evita duplicata)
+      if (stEmb === 'ALERTA' && stEnt !== 'ATRASADO') {
+        list.push({ ...TIPOS.EMBARQUE_VENCIDO, tipo: 'EMBARQUE_VENCIDO', pedido: p, diasAtraso: diasAtrEmb, valor })
+        return
+      }
+
+      // Entrega atrasada
+      if (stEnt === 'ATRASADO') {
+        list.push({ ...TIPOS.ENTREGA_ATRASADA, tipo: 'ENTREGA_ATRASADA', pedido: p, diasAtraso: diasAtrEnt, valor })
+        return
+      }
+
+      // Vence em breve
+      if (stEnt === 'EM_BREVE' || stEmb === 'EM_BREVE') {
+        list.push({ ...TIPOS.VENCE_3_DIAS, tipo: 'VENCE_3_DIAS', pedido: p, diasAtraso: diasAtrEnt, valor })
+        return
+      }
+
+      // Sem datas — só alerta se o pedido tem mais de 7 dias (evita ruído de pedidos novos)
+      if (!p.data_embarque && !p.data_prevista_entrega && diasPedido > 7 && parseFloat(p.quantidade_pendente) > 0) {
+        list.push({ ...TIPOS.SEM_DATA_PEDIDO, tipo: 'SEM_DATA_PEDIDO', pedido: p, diasAtraso: diasPedido, valor })
       }
     })
-    return list.sort((a, b) => {
-      const prioA = a.tipo === 'ALTO_VALOR_ATRASO' ? 0 : a.tipo === 'EMBARQUE_VENCIDO' ? 1 : a.tipo === 'ENTREGA_ATRASADA' ? 2 : a.tipo === 'VENCE_3_DIAS' ? 3 : 4
-      const prioB = b.tipo === 'ALTO_VALOR_ATRASO' ? 0 : b.tipo === 'EMBARQUE_VENCIDO' ? 1 : b.tipo === 'ENTREGA_ATRASADA' ? 2 : b.tipo === 'VENCE_3_DIAS' ? 3 : 4
-      return prioA !== prioB ? prioA - prioB : (b.valor - a.valor)
-    })
+
+    return list
+      .sort((a, b) => a.prio !== b.prio ? a.prio - b.prio : b.valor - a.valor)
+      // Deduplica — um pedido pode gerar só 1 alerta
+      .filter((a, i, arr) => arr.findIndex(x => x.pedido.numero_pedido === a.pedido.numero_pedido && x.pedido.codigo_produto === a.pedido.codigo_produto) === i)
   }, [pedidos])
 
+  const filtrados = useMemo(() =>
+    filtroTipo ? alertas.filter(a => a.tipo === filtroTipo) : alertas,
+    [alertas, filtroTipo]
+  )
+
   const resumo = useMemo(() => {
-    const por = {}
-    alertas.forEach(a => { por[a.tipo] = (por[a.tipo] || 0) + 1 })
-    return por
+    const r = {}
+    Object.keys(TIPOS).forEach(t => r[t] = 0)
+    alertas.forEach(a => r[a.tipo] = (r[a.tipo] || 0) + 1)
+    return r
   }, [alertas])
 
   const handleResolver = async () => {
@@ -54,6 +84,7 @@ export default function Alertas({ pedidos, onReload }) {
     await supabase.from('alertas_multa').insert({
       numero_pedido: resolvendo.pedido.numero_pedido,
       fornecedor:    resolvendo.pedido.fornecedor,
+      codigo_produto: resolvendo.pedido.codigo_produto,
       decisao:       'EMBARCADO',
       observacao:    JSON.stringify({ tipo_alerta: resolvendo.tipo, obs }),
       decidido_em:   new Date().toISOString(),
@@ -66,85 +97,130 @@ export default function Alertas({ pedidos, onReload }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* Modal de resolução */}
+      {/* Modal */}
       {resolvendo && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
-          <div style={{ background: C.surface, borderRadius: 16, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: C.brand, marginBottom: 4 }}>Registrar resolução</div>
-            <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>Pedido {resolvendo.pedido.numero_pedido} · {resolvendo.pedido.fornecedor}</div>
-            <div style={{ background: '#F9FAFB', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: 12, color: C.muted }}>
-              <strong style={{ color: C.brand }}>Alerta:</strong> {resolvendo.titulo}
+          <div style={{ background: C.surface, borderRadius: 16, padding: 28, width: 480, boxShadow: '0 20px 60px rgba(0,0,0,0.2)', border: `1px solid ${C.border}` }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.brand, marginBottom: 4 }}>{resolvendo.icon} Registrar ação</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Pedido #{resolvendo.pedido.numero_pedido} · {resolvendo.pedido.fornecedor}</div>
+            <div style={{ background: resolvendo.cor + '10', border: `1px solid ${resolvendo.cor}33`, borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: C.brand }}>
+              <strong style={{ color: resolvendo.cor }}>{resolvendo.titulo}</strong>
+              {resolvendo.diasAtraso > 0 && <span style={{ marginLeft: 8, color: resolvendo.cor }}>· {resolvendo.diasAtraso} dias</span>}
             </div>
             <label style={{ fontSize: 11, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Observação / Ação tomada</label>
-            <textarea value={obs} onChange={e => setObs(e.target.value)} rows={3} placeholder="Descreva a ação tomada..." style={{ width: '100%', marginTop: 6, marginBottom: 14, padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
+            <textarea value={obs} onChange={e => setObs(e.target.value)} rows={3}
+              placeholder="Ex: Fornecedor confirmou embarque para 25/07. Material em trânsito."
+              style={{ width: '100%', marginTop: 6, marginBottom: 14, padding: '10px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, resize: 'vertical', outline: 'none', fontFamily: 'inherit', color: C.text, background: C.bg }} />
             <div style={{ display: 'flex', gap: 10 }}>
-              <Btn onClick={handleResolver}>✓ Registrar</Btn>
-              <Btn variant="outline" onClick={() => setResolvendo(null)}>Cancelar</Btn>
+              <Btn onClick={handleResolver}>✓ Registrar ação</Btn>
+              <Btn variant="outline" onClick={() => { setResolvendo(null); setObs('') }}>Cancelar</Btn>
             </div>
           </div>
         </div>
       )}
 
-      {/* Resumo */}
+      {/* Cards de resumo */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
         {Object.entries(TIPOS).map(([tipo, cfg]) => (
-          <div key={tipo} style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `3px solid ${cfg.cor}`, borderRadius: 12, padding: '14px 16px' }}>
+          <div key={tipo} onClick={() => setFiltroTipo(t => t === tipo ? '' : tipo)} style={{
+            background: filtroTipo === tipo ? cfg.cor + '10' : C.surface,
+            border: `1px solid ${filtroTipo === tipo ? cfg.cor : C.border}`,
+            borderTop: `3px solid ${cfg.cor}`,
+            borderRadius: 12, padding: '14px 16px', cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}>
             <div style={{ fontSize: 20, marginBottom: 4 }}>{cfg.icon}</div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: C.brand }}>{resumo[tipo] || 0}</div>
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 2, lineHeight: 1.3 }}>{cfg.titulo}</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: resumo[tipo] > 0 ? cfg.cor : C.muted }}>{resumo[tipo]}</div>
+            <div style={{ fontSize: 10, color: C.muted, marginTop: 3, lineHeight: 1.4 }}>{cfg.titulo}</div>
           </div>
         ))}
       </div>
 
-      {/* Lista de alertas */}
+      {filtroTipo && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', background: C.accentDim, borderRadius: 8, border: `1px solid ${C.accent}` }}>
+          <span style={{ fontSize: 12, color: C.accentText }}>Filtrando: <strong>{TIPOS[filtroTipo]?.titulo}</strong></span>
+          <button onClick={() => setFiltroTipo('')} style={{ marginLeft: 'auto', fontSize: 11, color: C.muted, background: 'none', border: 'none', cursor: 'pointer' }}>✕ Limpar</button>
+        </div>
+      )}
+
+      {/* Lista */}
       <Card>
-        <CardTitle>{alertas.length} alertas ativos</CardTitle>
-        {alertas.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: C.subtle }}>
-            <div style={{ fontSize: 40, marginBottom: 8 }}>🎉</div>
-            <div style={{ fontSize: 14 }}>Nenhum alerta ativo</div>
+        <CardTitle>{filtrados.length} {filtroTipo ? TIPOS[filtroTipo]?.titulo : 'alertas ativos'}</CardTitle>
+
+        {filtrados.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🎉</div>
+            <div style={{ fontSize: 15, fontWeight: 600, color: C.brand }}>Nenhum alerta ativo</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Todas as entregas estão sob controle</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {alertas.map((a, i) => (
+            {filtrados.map((a, i) => (
               <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 14px', borderRadius: 10,
-                background: a.cor + '08', border: `1px solid ${a.cor}22`,
+                display: 'flex', alignItems: 'center', gap: 14,
+                padding: '13px 16px', borderRadius: 10,
+                background: a.cor + '06', border: `1px solid ${a.cor}18`,
                 borderLeft: `4px solid ${a.cor}`,
                 transition: 'background 0.15s',
               }}
-              onMouseEnter={e => e.currentTarget.style.background = a.cor + '12'}
-              onMouseLeave={e => e.currentTarget.style.background = a.cor + '08'}
+              onMouseEnter={e => e.currentTarget.style.background = a.cor + '0E'}
+              onMouseLeave={e => e.currentTarget.style.background = a.cor + '06'}
               >
-                <span style={{ fontSize: 22, flexShrink: 0 }}>{a.icon}</span>
+                <span style={{ fontSize: 24, flexShrink: 0 }}>{a.icon}</span>
+
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: a.cor }}>{a.titulo}</span>
-                    {a.diasAtraso > 0 && <span style={{ fontSize: 10, background: a.cor + '20', color: a.cor, padding: '1px 6px', borderRadius: 10, fontWeight: 600 }}>{a.diasAtraso} dias</span>}
+                    {a.diasAtraso > 0 && (
+                      <span style={{ fontSize: 10, background: a.cor + '18', color: a.cor, padding: '1px 7px', borderRadius: 10, fontWeight: 700 }}>
+                        {a.diasAtraso}d
+                      </span>
+                    )}
+                    {a.valor > 50000 && (
+                      <span style={{ fontSize: 10, background: '#FEF2F2', color: C.danger, padding: '1px 7px', borderRadius: 10, fontWeight: 700, border: `1px solid ${C.danger}22` }}>
+                        Alto valor
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize: 12, color: C.brand, fontWeight: 500 }}>
+
+                  <div style={{ fontSize: 13, color: C.brand, fontWeight: 500, marginBottom: 2 }}>
                     Pedido <strong style={{ color: C.accent }}>#{a.pedido.numero_pedido}</strong>
                     {a.pedido.comprador && !a.pedido.comprador.includes('identificado') && (
-                      <> · <span style={{ color: CORES_COMP?.[a.pedido.comprador] || C.muted }}>{a.pedido.comprador}</span></>
+                      <span style={{ marginLeft: 8, padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: (CORES_COMP[a.pedido.comprador] || C.muted) + '18', color: CORES_COMP[a.pedido.comprador] || C.muted }}>
+                        {a.pedido.comprador.split(' ')[0]}
+                      </span>
                     )}
-                    {' · '}<Ellipsis maxWidth={200} style={{ display: 'inline' }}>{a.pedido.fornecedor}</Ellipsis>
                   </div>
-                  <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>
-                    {a.pedido.descricao_produto} · {fmtCurrency(a.valor)}
+
+                  <div style={{ fontSize: 12, color: C.muted }}>
+                    <span style={{ fontWeight: 500, color: C.brand }}>{a.pedido.fornecedor}</span>
+                    {' · '}
+                    <span style={{ maxWidth: 220, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom' }}>{a.pedido.descricao_produto}</span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
+
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: C.brand }}>{fmtCurrency(a.valor)}</span>
                   <span style={{ fontSize: 11, color: C.muted }}>{fmtDate(a.pedido.data_prevista_entrega)}</span>
-                  <button onClick={() => setResolvendo(a)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${a.cor}`, background: 'white', color: a.cor, cursor: 'pointer', fontWeight: 500 }}>{a.acao}</button>
+                  <button onClick={() => setResolvendo(a)} style={{
+                    fontSize: 11, padding: '4px 12px', borderRadius: 6,
+                    border: `1px solid ${a.cor}`, background: 'white',
+                    color: a.cor, cursor: 'pointer', fontWeight: 600,
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = a.cor; e.currentTarget.style.color = 'white' }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'white'; e.currentTarget.style.color = a.cor }}
+                  >{a.acao}</button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </Card>
+
+      <div style={{ padding: '10px 14px', background: '#F9FAFB', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 11, color: C.muted }}>
+        💡 <strong>Sobre "Sem datas cadastradas":</strong> 87% dos pedidos não têm data de embarque/entrega preenchida no Sankhya. Este alerta só aparece para pedidos com mais de 7 dias. Recomenda-se padronizar o preenchimento dos campos <strong>AD_DTEMBARQUE</strong> e <strong>DTPREVENT</strong> no momento da emissão da OC.
+      </div>
     </div>
   )
 }
-
-const CORES_COMP = { 'Leonardo Henriques': '#1D4ED8', 'Franciele Dias': '#059669' }
