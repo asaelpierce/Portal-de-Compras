@@ -7,6 +7,7 @@ import { NFsView, CruzamentoView } from './components/NFs'
 import { GeradorMulta, AvaliacaoIDF } from './components/MultaIDF'
 import SavingDash from './components/SavingDash'
 import Alertas from './components/Alertas'
+import XMLAnalise from './components/XMLAnalise'
 import EntregaParcial from './components/EntregaParcial'
 import { DateInput } from './components/UI'
 import { C } from './lib/tokens'
@@ -22,6 +23,7 @@ const PAGES = [
   { id: 'saving',     label: 'Compradores',         icon: '👥', group: 'Análise' },
   { id: 'idf',        label: 'IDF Fornecedores',    icon: '📈', group: 'Análise' },
   { id: 'multa',      label: 'Multa',               icon: '⚠️', group: 'Análise' },
+  { id: 'xml',        label: 'Analisador XML',       icon: '🤖', group: 'Análise' },
 ]
 
 const GROUPS = ['Visão Geral', 'Compras', 'Análise']
@@ -171,6 +173,7 @@ export default function App() {
               {page === 'cruzamento' && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
               {page === 'saving'     && <SavingDash      pedidos={pedidos} />}
               {page === 'idf'        && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
+              {page === 'xml'        && <XMLAnalise />}
               {page === 'multa'      && <GeradorMulta    pedidos={pedidos} alertasMulta={alertasMulta} onReload={reload} />}
             </>
           )}
