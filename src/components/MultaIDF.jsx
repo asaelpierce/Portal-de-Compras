@@ -136,21 +136,28 @@ export function GeradorMulta({ pedidos, alertasMulta, onReload }) {
 
   const podeSalvar = form.fornecedor && parseFloat(form.valor_material) > 0 && parseInt(form.dias_atraso) > 0
 
-  // Download do documento HTML como PDF via janela de impressão
+  // Gera e abre o documento para impressão/PDF
   const handleDownload = () => {
     if (!podeSalvar) return
-    const dados = {
-      ...form,
-      data: new Date().toLocaleDateString('pt-BR'),
-    }
+    const dados = { ...form, data: new Date().toLocaleDateString('pt-BR') }
     const html = gerarHTMLMulta(dados, multa)
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const win = window.open(url, '_blank')
-    if (win) {
-      win.onload = () => {
-        setTimeout(() => { win.print() }, 500)
-      }
+
+    // Abre em nova aba e imprime
+    const novaAba = window.open('', '_blank')
+    if (novaAba) {
+      novaAba.document.open()
+      novaAba.document.write(html)
+      novaAba.document.close()
+      setTimeout(() => novaAba.print(), 800)
+    } else {
+      // Fallback: download direto do arquivo HTML
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `multa-${form.fornecedor || 'fornecedor'}-${new Date().toISOString().slice(0,10)}.html`
+      a.click()
+      URL.revokeObjectURL(url)
     }
   }
 
@@ -308,9 +315,19 @@ export function GeradorMulta({ pedidos, alertasMulta, onReload }) {
                     const dados = { numero: obs.numero_doc, fornecedor: r.fornecedor, endereco: obs.endereco, contato: obs.contato, email: obs.email, num_pedido: String(r.numero_pedido || ''), nf: obs.nf, valor_material: String(obs.valor_material || ''), dias_atraso: String(obs.dias_atraso || '') }
                     const m = calcMulta(obs.valor_material, obs.dias_atraso)
                     const html = gerarHTMLMulta({ ...dados, data: fmtDate(r.decidido_em?.split('T')[0]) }, m)
-                    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-                    const win = window.open(URL.createObjectURL(blob), '_blank')
-                    if (win) win.onload = () => setTimeout(() => win.print(), 500)
+                    const novaAba = window.open('', '_blank')
+                    if (novaAba) {
+                      novaAba.document.open()
+                      novaAba.document.write(html)
+                      novaAba.document.close()
+                      setTimeout(() => novaAba.print(), 800)
+                    } else {
+                      const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+                      const a = document.createElement('a')
+                      a.href = URL.createObjectURL(blob)
+                      a.download = `multa-${r.fornecedor}-reimprimir.html`
+                      a.click()
+                    }
                   } catch(e) { console.error(e) }
                 }
                 return <button onClick={handleRe} style={{ padding: '3px 10px', borderRadius: 6, border: `1px solid ${C.border}`, background: C.bg, color: C.accent, fontSize: 11, cursor: 'pointer', fontWeight: 500 }}>📄 Reimprimir</button>
