@@ -356,10 +356,34 @@ function conceito(idf) {
 }
 
 export function AvaliacaoIDF({ pedidos, nfs }) {
-  const idfData = useMemo(() => {
-    if (!pedidos.length || !nfs.length) return []
+  const [encerrados, setEncerrados] = useState([])
+  const [loadingEnc, setLoadingEnc] = useState(true)
 
-    // Índice NFs por numero_pedido_oc para cruzamento preciso via TGFVAR
+  useEffect(() => {
+    // Busca pedidos encerrados para calcular IDF com histórico completo
+    const fetchEnc = async () => {
+      let all = []
+      let from = 0
+      while (true) {
+        const { data, error } = await supabase
+          .from('pedidos_encerrados')
+          .select('numero_pedido,fornecedor,cod_fornecedor,data_prevista_entrega,data_encerramento,comprador')
+          .eq('tipo_encerramento', 'VALOR_NF')
+          .range(from, from + 999)
+        if (error || !data || data.length === 0) break
+        all = [...all, ...data]
+        if (data.length < 1000) break
+        from += 1000
+      }
+      setEncerrados(all)
+      setLoadingEnc(false)
+    }
+    fetchEnc()
+  }, [])
+  const idfData = useMemo(() => {
+    if (loadingEnc) return []
+
+    // Índice de NFs por pedido via TGFVAR
     const nfsPorPedido = {}
     nfs.forEach(n => {
       if (!n.numero_pedido_oc) return
@@ -368,33 +392,43 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
       nfsPorPedido[k].push(n)
     })
 
+    // Usa pedidos ENCERRADOS como base — são os que foram de fato entregues
     const map = {}
-    pedidos.forEach(p => {
-      const key = String(p.cod_fornecedor)
-      if (!map[key]) map[key] = { cod: p.cod_fornecedor, nome: p.fornecedor, prog: 0, prazo: 0, qtdProg: 0, qtdPrazo: 0 }
-      map[key].prog    += 1
-      map[key].qtdProg += parseFloat(p.quantidade_pedida) || 0
+    encerrados.forEach(p => {
+      const key = String(p.cod_fornecedor || p.fornecedor)
+      if (!map[key]) map[key] = {
+        nome: p.fornecedor, cod: p.cod_fornecedor,
+        total: 0, no_prazo: 0, com_nf: 0,
+      }
+      map[key].total += 1
 
+      // Verifica se tem NF vinculada
       const nfsList = nfsPorPedido[String(p.numero_pedido)] || []
-      if (nfsList.length > 0 && p.data_prevista_entrega) {
-        const nf = [...nfsList].sort((a, b) => new Date(b.data_recebimento) - new Date(a.data_recebimento))[0]
-        const recStr  = String(nf.data_recebimento || '').match(/(\d{4})-(\d{2})-(\d{2})/)?.[0]
-        const prevStr = String(p.data_prevista_entrega || '').match(/(\d{4})-(\d{2})-(\d{2})/)?.[0]
-        if (recStr && prevStr) {
-          const rec  = new Date(recStr  + 'T12:00:00')
-          const prev = new Date(prevStr + 'T12:00:00')
-          if (rec <= prev) {
-            map[key].prazo    += 1
-            map[key].qtdPrazo += parseFloat(nf.quantidade_recebida) || 0
+      if (nfsList.length > 0) {
+        map[key].com_nf += 1
+        // Verifica se a NF chegou dentro do prazo
+        if (p.data_prevista_entrega) {
+          const nf = [...nfsList].sort((a, b) => new Date(a.data_recebimento) - new Date(b.data_recebimento))[0]
+          const recStr  = String(nf.data_recebimento || '').slice(0, 10)
+          const prevStr = String(p.data_prevista_entrega || '').slice(0, 10)
+          if (recStr && prevStr && recStr <= prevStr) {
+            map[key].no_prazo += 1
           }
         }
       }
     })
+
     return Object.values(map)
-      .filter(f => f.prog > 0)
-      .map(f => { const r = calcIDF(f.prog, f.prazo, f.qtdProg, f.qtdPrazo); return { ...f, ...r, conceito: conceito(r.idf) } })
+      .filter(f => f.total >= 1)
+      .map(f => {
+        // IDF = (% no prazo × 80%) + (% com NF × 20%)
+        const cp  = f.total > 0 ? parseFloat((f.no_prazo / f.total * 100).toFixed(1)) : 0
+        const cq  = f.total > 0 ? parseFloat((f.com_nf  / f.total * 100).toFixed(1)) : 0
+        const idf = parseFloat(((cp * 0.8) + (cq * 0.2)).toFixed(1))
+        return { ...f, cp, cq, idf, conceito: conceito(idf) }
+      })
       .sort((a, b) => a.idf - b.idf)
-  }, [pedidos, nfs])
+  }, [encerrados, nfs, loadingEnc])
 
   const media = idfData.length ? (idfData.reduce((s, f) => s + f.idf, 0) / idfData.length).toFixed(1) : '—'
   const dist = ['Ótimo','Bom','Regular','Insuficiente'].map(l => ({ label: l, count: idfData.filter(f => f.conceito.label === l).length, ...conceito({Ótimo:97,Bom:89,Regular:72,Insuficiente:30}[l]) }))
@@ -428,13 +462,16 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
             {label:'Fornecedor',render:r=><span style={{fontWeight:500}}>{r.nome||'—'}</span>},
             {label:'Programadas',render:r=><span style={{color:C.muted}}>{r.prog}</span>},
             {label:'No prazo',render:r=><span style={{color:C.okText,fontWeight:600}}>{r.prazo}</span>},
-            {label:'CP (prazo)',render:r=>(<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:C.accent,width:`${r.cp}%`}}/></div><span style={{fontSize:12,fontWeight:600,color:C.accent,minWidth:38}}>{r.cp}%</span></div>)},
-            {label:'CQ (qtd)',render:r=>(<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:C.success,width:`${r.cq}%`}}/></div><span style={{fontSize:12,fontWeight:600,color:C.okText,minWidth:38}}>{r.cq}%</span></div>)},
+            {label:'Pedidos',render:r=><span style={{fontWeight:600,color:C.brand}}>{r.total}</span>},
+            {label:'No prazo',render:r=><span style={{color:C.okText,fontWeight:600}}>{r.no_prazo}</span>},
+            {label:'Com NF',render:r=><span style={{color:C.accent,fontWeight:600}}>{r.com_nf}</span>},
+            {label:'CP (prazo %)',render:r=>(<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:r.cp>=80?C.success:r.cp>=60?C.warning:C.danger,width:`${r.cp}%`}}/></div><span style={{fontSize:12,fontWeight:600,color:r.cp>=80?C.okText:r.cp>=60?C.warnText:C.dangerText,minWidth:38}}>{r.cp}%</span></div>)},
+            {label:'CQ (NF %)',render:r=>(<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:C.accent,width:`${r.cq}%`}}/></div><span style={{fontSize:12,fontWeight:600,color:C.accent,minWidth:38}}>{r.cq}%</span></div>)},
             {label:'IDF',render:r=><span style={{display:'inline-block',padding:'4px 12px',borderRadius:20,fontSize:13,fontWeight:700,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span>},
             {label:'Conceito',render:r=><span style={{display:'inline-block',padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span>},
           ]}
           rows={idfData}
-          emptyMsg="Carregue pedidos e NFs para calcular o IDF"
+          emptyMsg={loadingEnc ? "Carregando histórico de pedidos..." : "Nenhum fornecedor com pedidos encerrados encontrado"}
         />
       </Card>
     </div>
