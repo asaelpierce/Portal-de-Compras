@@ -10,6 +10,7 @@ import Alertas from './components/Alertas'
 import EntregaParcial from './components/EntregaParcial'
 import XMLAnalise from './components/XMLAnalise'
 import Recebimentos from './components/Recebimentos'
+import Divergencias from './components/Divergencias'
 import Governanca from './components/Governanca'
 import Lembretes from './components/Lembretes'
 import { DateInput } from './components/UI'
@@ -23,6 +24,7 @@ const PAGES = [
   { id: 'importacao',  label: 'Importação',         icon: '✈️', group: 'Compras' },
   { id: 'parcial',     label: 'Entrega parcial',    icon: '📊', group: 'Compras' },
   { id: 'nfs',         label: 'NFs recebidas',      icon: '🧾', group: 'Compras' },
+  { id: 'divergencias', label: 'Divergências NF', icon: '🔎', group: 'Análise' },
   { id: 'cruzamento',  label: 'OC × NF',            icon: '🔗', group: 'Compras' },
   { id: 'recebimentos',label: 'Recebimentos',       icon: '📋', group: 'Compras' },
   { id: 'saving',      label: 'Compradores',        icon: '👥', group: 'Análise' },
@@ -184,6 +186,7 @@ export default function App() {
               {page === 'nfs'          && <NFsView         nfs={nfs} />}
               {page === 'cruzamento'   && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
               {page === 'recebimentos' && <Recebimentos />}
+              {page === 'divergencias' && <Divergencias />}
               {page === 'saving'       && <SavingDash      pedidos={pedidos} />}
               {page === 'governanca'   && <Governanca      pedidos={pedidos} />}
               {page === 'idf'          && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
