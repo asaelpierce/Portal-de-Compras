@@ -77,7 +77,7 @@ export default function EntregaParcial({ pedidos }) {
       ? porPedido.reduce((s, p) => s + p.pct_atendimento, 0) / porPedido.length
       : 0
     const valorPendente = porPedido.reduce((s, p) => s + (p.valor_total * (1 - p.pct_atendimento / 100)), 0)
-    return { parciais: parciais.length, naoIniciados: naoIniciados.length, parcialAtraso: parcialAtraso.length, pctMedio, valorPendente }
+    return { parciais: parciais.length, parcialAtraso: parcialAtraso.length, pctMedio, valorPendente }
   }, [porPedido])
 
   const compradores = useMemo(() => [...new Set(pedidos.map(p => p.comprador).filter(Boolean))].sort(), [pedidos])
@@ -102,11 +102,10 @@ export default function EntregaParcial({ pedidos }) {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
         {[
-          { label: 'Entrega parcial',      value: kpis.parciais,     color: C.warning, icon: '📦', sub: 'itens iniciados mas incompletos' },
-          { label: 'Não iniciados',         value: kpis.naoIniciados, color: C.subtle,  icon: '⏳', sub: 'nenhuma entrega realizada' },
-          { label: 'Parcial + atrasado',    value: kpis.parcialAtraso,color: C.danger,  icon: '🔴', sub: 'pendente e fora do prazo' },
-          { label: 'Atendimento médio',     value: `${fmt(kpis.pctMedio, 0)}%`, color: kpis.pctMedio >= 60 ? C.success : C.danger, icon: '📊', sub: 'qtd entregue / pedida' },
-          { label: 'Valor pendente est.',   value: fmtCurrency(kpis.valorPendente), color: C.accent, icon: '💰', sub: 'estimativa proporcional' },
+          { label: 'Entregas parciais',    value: kpis.parciais,       color: C.warning, icon: '📦', sub: 'itens com entrega incompleta' },
+          { label: 'Parcial + atrasado',   value: kpis.parcialAtraso,  color: C.danger,  icon: '🔴', sub: 'pendente e fora do prazo' },
+          { label: 'Atendimento médio',    value: `${kpis.pctMedio?.toFixed(0) || 0}%`, color: C.accent, icon: '📊', sub: 'qtd entregue / pedida' },
+          { label: 'Valor pendente est.',  value: fmtCurrency(kpis.valorPendente), color: C.brand, icon: '💰', sub: 'estimativa proporcional' },
         ].map((k, i) => (
           <div key={i} style={{
             background: C.surface, border: `1px solid ${C.border}`,
@@ -135,7 +134,6 @@ export default function EntregaParcial({ pedidos }) {
             <Select value={filtroStatus} onChange={setFiltroStatus} options={[
               { value: '',        label: 'Todos' },
               { value: 'parcial', label: '📦 Entrega parcial' },
-              { value: 'nao_inic',label: '⏳ Não iniciados' },
               { value: 'atrasado',label: '🔴 Atrasados' },
             ]} />
             <Select value={filtroComp} onChange={setFiltroComp} options={[

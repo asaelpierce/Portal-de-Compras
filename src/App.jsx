@@ -7,29 +7,29 @@ import { NFsView, CruzamentoView } from './components/NFs'
 import { GeradorMulta, AvaliacaoIDF } from './components/MultaIDF'
 import SavingDash from './components/SavingDash'
 import Alertas from './components/Alertas'
-import Lembretes from './components/Lembretes'
-import Governanca from './components/Governanca'
-import Recebimentos from './components/Recebimentos'
-import XMLAnalise from './components/XMLAnalise'
 import EntregaParcial from './components/EntregaParcial'
+import XMLAnalise from './components/XMLAnalise'
+import Recebimentos from './components/Recebimentos'
+import Governanca from './components/Governanca'
+import Lembretes from './components/Lembretes'
 import { DateInput } from './components/UI'
 import { C } from './lib/tokens'
 
 const PAGES = [
-  { id: 'dashboard',  label: 'Dashboard',          icon: '📊', group: 'Visão Geral' },
-  { id: 'alertas',    label: 'Alertas',             icon: '🔔', group: 'Visão Geral', badge: true },
-  { id: 'pedidos',    label: 'Pedidos em aberto',   icon: '📦', group: 'Compras' },
-  { id: 'followup',   label: 'Follow-up',           icon: '🔄', group: 'Compras' },
-  { id: 'parcial',    label: 'Entrega parcial',      icon: '📊', group: 'Compras' },
-  { id: 'nfs',        label: 'NFs recebidas',       icon: '🧾', group: 'Compras' },
-  { id: 'recebimentos', label: 'Recebimentos',    icon: '📋', group: 'Compras' },
-  { id: 'cruzamento', label: 'OC × NF',             icon: '🔗', group: 'Compras' },
-  { id: 'lembretes',   label: 'Lembretes',           icon: '🔔', group: 'Compras' },
-  { id: 'governanca',  label: 'Governança',          icon: '🔍', group: 'Análise' },
-  { id: 'saving',     label: 'Compradores',         icon: '👥', group: 'Análise' },
-  { id: 'idf',        label: 'IDF Fornecedores',    icon: '📈', group: 'Análise' },
-  { id: 'multa',      label: 'Multa',               icon: '⚠️', group: 'Análise' },
-  { id: 'xml',        label: 'Analisador XML',       icon: '🤖', group: 'Análise' },
+  { id: 'dashboard',   label: 'Dashboard',         icon: '📊', group: 'Visão Geral' },
+  { id: 'alertas',     label: 'Alertas',            icon: '🔔', group: 'Visão Geral', badge: true },
+  { id: 'lembretes',   label: 'Lembretes',          icon: '🔔', group: 'Visão Geral' },
+  { id: 'pedidos',     label: 'Pedidos',            icon: '📦', group: 'Compras' },
+  { id: 'importacao',  label: 'Importação',         icon: '✈️', group: 'Compras' },
+  { id: 'parcial',     label: 'Entrega parcial',    icon: '📊', group: 'Compras' },
+  { id: 'nfs',         label: 'NFs recebidas',      icon: '🧾', group: 'Compras' },
+  { id: 'cruzamento',  label: 'OC × NF',            icon: '🔗', group: 'Compras' },
+  { id: 'recebimentos',label: 'Recebimentos',       icon: '📋', group: 'Compras' },
+  { id: 'saving',      label: 'Compradores',        icon: '👥', group: 'Análise' },
+  { id: 'governanca',  label: 'Governança',         icon: '🔍', group: 'Análise' },
+  { id: 'idf',         label: 'IDF Fornecedores',   icon: '📈', group: 'Análise' },
+  { id: 'multa',       label: 'Multa',              icon: '⚠️', group: 'Análise' },
+  { id: 'xml',         label: 'Analisador XML',     icon: '🤖', group: 'Análise' },
 ]
 
 const GROUPS = ['Visão Geral', 'Compras', 'Análise']
@@ -44,8 +44,14 @@ export default function App() {
   const { pedidos, nfs, alertasMulta, loading, error, lastSync, reload } =
     useSupplyData({ dataInicio, dataFim })
 
+  const pedidosNacionais   = pedidos.filter(p => p.tipo_pedido !== 'importacao')
+  const pedidosImportacao  = pedidos.filter(p => p.tipo_pedido === 'importacao')
+  const pedidosParciais    = pedidos.filter(p =>
+    parseFloat(p.quantidade_entregue) > 0 && parseFloat(p.quantidade_pendente) > 0
+  )
+
   const alertasAtivos = pedidos.filter(p => p.prioridade <= 2).length
-  const parciais = pedidos.filter(p => parseFloat(p.quantidade_entregue) > 0 && parseFloat(p.quantidade_pendente) > 0).length
+  const parciais      = pedidosParciais.length
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, fontFamily: "'Inter', system-ui, sans-serif", color: C.text }}>
@@ -118,10 +124,9 @@ export default function App() {
           border: '1px solid rgba(255,255,255,0.1)',
           background: 'transparent', color: 'rgba(255,255,255,0.3)',
           cursor: 'pointer', fontSize: 11, transition: 'all 0.15s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.color='rgba(255,255,255,0.6)' }}
-        onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.color='rgba(255,255,255,0.3)' }}
-        >{sideOpen ? '◀ Recolher' : '▶'}</button>
+        }}>
+          {sideOpen ? '◀ Recolher' : '▶'}
+        </button>
       </aside>
 
       {/* MAIN */}
@@ -170,20 +175,20 @@ export default function App() {
             </div>
           ) : (
             <>
-              {page === 'dashboard'  && <Dashboard      pedidos={pedidos} nfs={nfs} onVerificarEmbarque={() => setPage('alertas')} />}
-              {page === 'alertas'    && <Alertas         pedidos={pedidos} onReload={reload} />}
-              {page === 'pedidos'    && <Pedidos         pedidos={pedidos} onReload={reload} />}
-              {page === 'followup'   && <FollowUp        pedidos={pedidos} nfs={nfs} />}
-              {page === 'parcial'    && <EntregaParcial  pedidos={pedidos} />}
-              {page === 'nfs'        && <NFsView         nfs={nfs} />}
+              {page === 'dashboard'    && <Dashboard      pedidos={pedidos} nfs={nfs} onVerificarEmbarque={() => setPage('alertas')} />}
+              {page === 'alertas'      && <Alertas         pedidos={pedidos} onReload={reload} />}
+              {page === 'lembretes'    && <Lembretes       pedidos={pedidos} />}
+              {page === 'pedidos'      && <Pedidos         pedidos={pedidosNacionais} onReload={reload} />}
+              {page === 'importacao'   && <Pedidos         pedidos={pedidosImportacao} onReload={reload} isImportacao />}
+              {page === 'parcial'      && <EntregaParcial  pedidos={pedidosParciais} />}
+              {page === 'nfs'          && <NFsView         nfs={nfs} />}
+              {page === 'cruzamento'   && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
               {page === 'recebimentos' && <Recebimentos />}
-              {page === 'cruzamento' && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
-              {page === 'lembretes'  && <Lembretes pedidos={pedidos} />}
-              {page === 'governanca' && <Governanca pedidos={pedidos} />}
-              {page === 'saving'     && <SavingDash      pedidos={pedidos} />}
-              {page === 'idf'        && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
-              {page === 'xml'        && <XMLAnalise />}
-              {page === 'multa'      && <GeradorMulta    pedidos={pedidos} alertasMulta={alertasMulta} onReload={reload} />}
+              {page === 'saving'       && <SavingDash      pedidos={pedidos} />}
+              {page === 'governanca'   && <Governanca      pedidos={pedidos} />}
+              {page === 'idf'          && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
+              {page === 'multa'        && <GeradorMulta    pedidos={pedidos} alertasMulta={alertasMulta} onReload={reload} />}
+              {page === 'xml'          && <XMLAnalise />}
             </>
           )}
         </main>

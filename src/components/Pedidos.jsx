@@ -352,7 +352,7 @@ function RankingAtrasos({ pedidos }) {
 }
 
 // ── COMPONENTE PRINCIPAL ─────────────────────────────────────────────────────
-export default function Pedidos({ pedidos, onReload }) {
+export default function Pedidos({ pedidos, onReload, isImportacao = false }) {
   const [search, setSearch]               = useState('')
   const [filtroEntrega, setFiltroEntrega] = useState('')
   const [filtroEmbarque, setFiltroEmbarque] = useState('')
@@ -455,7 +455,9 @@ export default function Pedidos({ pedidos, onReload }) {
           {/* Header + filtros */}
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14, gap: 12, flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: C.brand }}>Pedidos em aberto</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.brand }}>
+                {isImportacao ? '✈️ Pedidos de importação' : 'Pedidos em aberto'}
+              </div>
               <div style={{ fontSize: 12, color: C.muted, marginTop: 2, display: 'flex', gap: 12 }}>
                 <span><strong>{pedidosAgrupados.length}</strong> pedidos</span>
                 <span style={{ color: C.muted }}>·</span>
