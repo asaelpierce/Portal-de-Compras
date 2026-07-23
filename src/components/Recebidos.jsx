@@ -31,11 +31,26 @@ export default function Recebidos() {
   const [expandido, setExpandido]   = useState(null)
 
   useEffect(() => {
-    supabase.from('pedidos_encerrados')
-      .select('*', { count: 'exact' })
-      .order('data_encerramento', { ascending: false })
-      .limit(5000)
-      .then(({ data }) => { setDados(data || []); setLoading(false) })
+    const fetchAll = async () => {
+      setLoading(true)
+      let all: any[] = []
+      let from = 0
+      const pageSize = 1000
+      while (true) {
+        const { data, error } = await supabase
+          .from('pedidos_encerrados')
+          .select('*')
+          .order('data_encerramento', { ascending: false })
+          .range(from, from + pageSize - 1)
+        if (error || !data || data.length === 0) break
+        all = [...all, ...data]
+        if (data.length < pageSize) break
+        from += pageSize
+      }
+      setDados(all)
+      setLoading(false)
+    }
+    fetchAll()
   }, [])
 
   const compradores = useMemo(() => [...new Set(dados.map(d => d.comprador).filter(Boolean))].sort(), [dados])
