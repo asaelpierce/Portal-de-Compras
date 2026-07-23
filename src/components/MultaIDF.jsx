@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Card, CardTitle, DataTable, Btn } from './UI'
 import { C } from '../lib/tokens'
 import { supabase } from '../lib/supabase'
