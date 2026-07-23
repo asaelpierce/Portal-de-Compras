@@ -357,20 +357,43 @@ function conceito(idf) {
 
 export function AvaliacaoIDF({ pedidos, nfs }) {
   const idfData = useMemo(() => {
+    if (!pedidos.length || !nfs.length) return []
+
+    // Índice NFs por numero_pedido_oc para cruzamento preciso via TGFVAR
+    const nfsPorPedido = {}
+    nfs.forEach(n => {
+      if (!n.numero_pedido_oc) return
+      const k = String(n.numero_pedido_oc)
+      if (!nfsPorPedido[k]) nfsPorPedido[k] = []
+      nfsPorPedido[k].push(n)
+    })
+
     const map = {}
     pedidos.forEach(p => {
       const key = String(p.cod_fornecedor)
       if (!map[key]) map[key] = { cod: p.cod_fornecedor, nome: p.fornecedor, prog: 0, prazo: 0, qtdProg: 0, qtdPrazo: 0 }
-      map[key].prog += 1
+      map[key].prog    += 1
       map[key].qtdProg += parseFloat(p.quantidade_pedida) || 0
-      const nf = nfs.find(n => n.cod_fornecedor == p.cod_fornecedor && n.codigo_produto == p.codigo_produto && Math.abs((parseFloat(n.valor_item) || 0) - (parseFloat(p.valor_item) || 0)) < 0.5)
-      if (nf && p.data_prevista_entrega) {
-        const rec = new Date(String(nf.data_recebimento).match(/(\d{4})-(\d{2})-(\d{2})/)?.[0] + 'T12:00:00')
-        const prev = new Date(String(p.data_prevista_entrega).match(/(\d{4})-(\d{2})-(\d{2})/)?.[0] + 'T12:00:00')
-        if (rec <= prev) { map[key].prazo += 1; map[key].qtdPrazo += parseFloat(nf.quantidade_recebida) || 0 }
+
+      const nfsList = nfsPorPedido[String(p.numero_pedido)] || []
+      if (nfsList.length > 0 && p.data_prevista_entrega) {
+        const nf = [...nfsList].sort((a, b) => new Date(b.data_recebimento) - new Date(a.data_recebimento))[0]
+        const recStr  = String(nf.data_recebimento || '').match(/(\d{4})-(\d{2})-(\d{2})/)?.[0]
+        const prevStr = String(p.data_prevista_entrega || '').match(/(\d{4})-(\d{2})-(\d{2})/)?.[0]
+        if (recStr && prevStr) {
+          const rec  = new Date(recStr  + 'T12:00:00')
+          const prev = new Date(prevStr + 'T12:00:00')
+          if (rec <= prev) {
+            map[key].prazo    += 1
+            map[key].qtdPrazo += parseFloat(nf.quantidade_recebida) || 0
+          }
+        }
       }
     })
-    return Object.values(map).map(f => { const r = calcIDF(f.prog, f.prazo, f.qtdProg, f.qtdPrazo); return { ...f, ...r, conceito: conceito(r.idf) } }).sort((a, b) => a.idf - b.idf)
+    return Object.values(map)
+      .filter(f => f.prog > 0)
+      .map(f => { const r = calcIDF(f.prog, f.prazo, f.qtdProg, f.qtdPrazo); return { ...f, ...r, conceito: conceito(r.idf) } })
+      .sort((a, b) => a.idf - b.idf)
   }, [pedidos, nfs])
 
   const media = idfData.length ? (idfData.reduce((s, f) => s + f.idf, 0) / idfData.length).toFixed(1) : '—'
