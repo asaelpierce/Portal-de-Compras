@@ -32,8 +32,9 @@ export default function Recebidos() {
 
   useEffect(() => {
     supabase.from('pedidos_encerrados')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('data_encerramento', { ascending: false })
+      .limit(5000)
       .then(({ data }) => { setDados(data || []); setLoading(false) })
   }, [])
 
