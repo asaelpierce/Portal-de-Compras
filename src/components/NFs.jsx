@@ -4,7 +4,15 @@ import { C } from '../lib/tokens'
 import { fmtDate, fmtCurrency, fmtInt } from '../lib/utils'
 
 export function NFsView({ nfs }) {
-  const [search, setSearch] = useState('')
+  const [search, setSearch]       = useState('')
+  const [filtroMes, setFiltroMes] = useState('')
+  const [filtroPed, setFiltroPed] = useState('')
+
+  const meses = useMemo(() => {
+    const set = new Set()
+    nfs.forEach(n => { if (n.data_recebimento) set.add(String(n.data_recebimento).slice(0,7)) })
+    return [...set].sort().reverse()
+  }, [nfs])
 
   const agrupadas = useMemo(() => {
     const map = {}
@@ -18,16 +26,38 @@ export function NFsView({ nfs }) {
   }, [nfs])
 
   const filtradas = agrupadas.filter(n => {
-    if (!search) return true
-    const q = search.toLowerCase()
-    return [(n.fornecedor||''), String(n.numero_nf), String(n.numero_pedido_oc||'')].some(v => v.toLowerCase().includes(q))
+    if (filtroMes && !String(n.data_recebimento||'').startsWith(filtroMes)) return false
+    if (filtroPed === 'com_oc' && !n.numero_pedido_oc) return false
+    if (filtroPed === 'sem_oc' &&  n.numero_pedido_oc) return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (![(n.fornecedor||''), String(n.numero_nf), String(n.numero_pedido_oc||'')].some(v => v.toLowerCase().includes(q))) return false
+    }
+    return true
   })
+
+  const fmtMes = (m) => {
+    const [y, mon] = m.split('-')
+    const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+    return `${nomes[parseInt(mon)-1]}/${y}`
+  }
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-      <div style={{ display:'flex', gap:10, alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ display:'flex', gap:8, alignItems:'center', justifyContent:'space-between', flexWrap:'wrap' }}>
         <div style={{ fontSize:13, color:C.muted }}>{filtradas.length} notas fiscais</div>
-        <SearchInput value={search} onChange={setSearch} placeholder="NF, fornecedor, pedido..." />
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <SearchInput value={search} onChange={setSearch} placeholder="NF, fornecedor, pedido..." />
+          <Select value={filtroMes} onChange={setFiltroMes} options={[
+            { value:'', label:'Todos os meses' },
+            ...meses.map(m => ({ value:m, label:fmtMes(m) }))
+          ]} />
+          <Select value={filtroPed} onChange={setFiltroPed} options={[
+            { value:'',       label:'Todas as NFs' },
+            { value:'com_oc', label:'✅ Com pedido vinculado' },
+            { value:'sem_oc', label:'❌ Sem pedido vinculado' },
+          ]} />
+        </div>
       </div>
       <Card>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>

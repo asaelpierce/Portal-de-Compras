@@ -30,11 +30,13 @@ function MiniBar({ value, total, color }) {
 }
 
 export default function Recebimentos() {
-  const [dados, setDados]         = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [search, setSearch]       = useState('')
-  const [filtroNC, setFiltroNC]   = useState('')
-  const [detalhe, setDetalhe]     = useState(null)
+  const [dados, setDados]           = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [search, setSearch]         = useState('')
+  const [filtroNC, setFiltroNC]     = useState('')
+  const [filtroGrupo, setFiltroGrupo] = useState('')
+  const [filtroMes, setFiltroMes]   = useState('')
+  const [detalhe, setDetalhe]       = useState(null)
 
   useEffect(() => {
     supabase.from('recebimentos').select('*').order('data_recebimento', { ascending: false }).then(({ data }) => {
@@ -76,22 +78,70 @@ export default function Recebimentos() {
       .sort((a, b) => b.nc - a.nc || a.score - b.score)
   }, [dados])
 
-  const filtrados = useMemo(() => porFornecedor.filter(f => {
-    if (filtroNC === 'com_nc'   && f.nc === 0)  return false
-    if (filtroNC === 'sem_nc'   && f.nc > 0)    return false
+  const grupos = useMemo(() =>
+    [...new Set(dados.map(r => r.grupo_produto).filter(Boolean))].sort(), [dados])
+  const meses = useMemo(() => {
+    const set = new Set()
+    dados.forEach(r => { if (r.data_recebimento) set.add(String(r.data_recebimento).slice(0,7)) })
+    return [...set].sort().reverse()
+  }, [dados])
+  const fmtMes = m => {
+    const [y, mon] = m.split('-')
+    return `${'Jan,Fev,Mar,Abr,Mai,Jun,Jul,Ago,Set,Out,Nov,Dez'.split(',')[parseInt(mon)-1]}/${y}`
+  }
+
+  // Score recalculado com filtros de mês e grupo aplicados nos dados brutos
+  const porFornecedorFiltrado = useMemo(() => {
+    const dadosFilt = dados.filter(r => {
+      if (filtroMes   && !String(r.data_recebimento||'').startsWith(filtroMes)) return false
+      if (filtroGrupo && r.grupo_produto !== filtroGrupo) return false
+      return true
+    })
+    const map = {}
+    dadosFilt.forEach(r => {
+      const k = (r.fornecedor||'').trim().toUpperCase()
+      if (!k || k.length < 3) return
+      if (!map[k]) map[k] = { nome: r.fornecedor?.trim(), total:0, prazo:0, emb:0, nf:0, nc:0, recebimentos:[] }
+      map[k].total++
+      if (r.prazo_dentro_esperado==='Sim') map[k].prazo++
+      if (r.embalagem_conforme   ==='Sim') map[k].emb++
+      if (r.nf_conforme_pedido   ==='Sim') map[k].nf++
+      if (r.nao_conformidade     ==='Sim') map[k].nc++
+      map[k].recebimentos.push(r)
+    })
+    return Object.values(map).map(f => ({
+      ...f,
+      pct_prazo: Math.round(f.prazo/f.total*100),
+      pct_emb:   Math.round(f.emb  /f.total*100),
+      pct_nf:    Math.round(f.nf   /f.total*100),
+      pct_nc:    Math.round(f.nc   /f.total*100),
+      score: Math.round((f.prazo/f.total*100*0.40)+(f.emb/f.total*100*0.30)+(f.nf/f.total*100*0.20)+((1-f.nc/f.total)*100*0.10)),
+    })).filter(f => f.total>=1).sort((a,b)=>b.nc-a.nc||a.score-b.score)
+  }, [dados, filtroMes, filtroGrupo])
+
+  const filtrados = useMemo(() => porFornecedorFiltrado.filter(f => {
+    if (filtroNC === 'com_nc'    && f.nc === 0)        return false
+    if (filtroNC === 'sem_nc'    && f.nc > 0)          return false
     if (filtroNC === 'prazo_nok' && f.pct_prazo >= 80) return false
     if (search && !f.nome.toLowerCase().includes(search.toLowerCase())) return false
     return true
-  }), [porFornecedor, search, filtroNC])
+  }), [porFornecedorFiltrado, search, filtroNC])
 
-  const kpis = useMemo(() => ({
-    total:       dados.length,
-    nc_total:    dados.filter(r => r.nao_conformidade === 'Sim').length,
-    prazo_ok:    dados.filter(r => r.prazo_dentro_esperado === 'Sim').length,
-    emb_nok:     dados.filter(r => r.embalagem_conforme === 'Não').length,
-    fornecedores: porFornecedor.length,
-    criticos:    porFornecedor.filter(f => f.pct_nc >= 30 && f.total >= 2).length,
-  }), [dados, porFornecedor])
+  const kpis = useMemo(() => {
+    const base = dados.filter(r => {
+      if (filtroMes   && !String(r.data_recebimento||'').startsWith(filtroMes)) return false
+      if (filtroGrupo && r.grupo_produto !== filtroGrupo) return false
+      return true
+    })
+    return {
+      total:        base.length,
+      nc_total:     base.filter(r => r.nao_conformidade === 'Sim').length,
+      prazo_ok:     base.filter(r => r.prazo_dentro_esperado === 'Sim').length,
+      emb_nok:      base.filter(r => r.embalagem_conforme === 'Não').length,
+      fornecedores: porFornecedorFiltrado.length,
+      criticos:     porFornecedorFiltrado.filter(f => f.pct_nc >= 30 && f.total >= 2).length,
+    }
+  }, [dados, porFornecedorFiltrado, filtroMes, filtroGrupo])
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
@@ -168,8 +218,18 @@ export default function Recebimentos() {
             <CardTitle>Score de qualidade por fornecedor</CardTitle>
             <div style={{ fontSize:11, color:C.muted, marginTop:-12 }}>Baseado no formulário de recebimento do almoxarifado · Score = 40% prazo + 30% embalagem + 20% NF conforme + 10% sem NC</div>
           </div>
-          <div style={{ display:'flex', gap:8 }}>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             <SearchInput value={search} onChange={setSearch} placeholder="Buscar fornecedor..." />
+            <select value={filtroMes} onChange={e => setFiltroMes(e.target.value)}
+              style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:'7px 28px 7px 12px', fontSize:12, color:C.text, outline:'none' }}>
+              <option value="">Todos os meses</option>
+              {meses.map(m => <option key={m} value={m}>{fmtMes(m)}</option>)}
+            </select>
+            <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}
+              style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:'7px 28px 7px 12px', fontSize:12, color:C.text, outline:'none' }}>
+              <option value="">Todos os grupos</option>
+              {grupos.map(g => <option key={g} value={g}>{g}</option>)}
+            </select>
             <select value={filtroNC} onChange={e => setFiltroNC(e.target.value)}
               style={{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:'7px 28px 7px 12px', fontSize:12, color:C.text, outline:'none' }}>
               <option value="">Todos</option>

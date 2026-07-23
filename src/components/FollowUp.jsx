@@ -12,12 +12,18 @@ const PRIORIDADE_LABEL = {
 }
 
 export default function FollowUp({ pedidos, nfs }) {
-  const [search, setSearch] = useState('')
-  const [filtroForn, setFiltroForn] = useState('')
+  const [search, setSearch]               = useState('')
+  const [filtroForn, setFiltroForn]       = useState('')
   const [filtroPrioridade, setFiltroPrioridade] = useState('')
+  const [filtroComp, setFiltroComp]       = useState('')
+  const [filtroNF, setFiltroNF]           = useState('')
 
   const fornecedores = useMemo(() =>
     [...new Set(pedidos.map(p => p.fornecedor).filter(Boolean))].sort(),
+    [pedidos]
+  )
+  const compradores = useMemo(() =>
+    [...new Set(pedidos.map(p => p.comprador).filter(Boolean))].sort(),
     [pedidos]
   )
 
@@ -43,6 +49,9 @@ export default function FollowUp({ pedidos, nfs }) {
       .filter(p => {
         if (filtroPrioridade && String(p.prioridade) !== filtroPrioridade) return false
         if (filtroForn && p.fornecedor !== filtroForn) return false
+        if (filtroComp && p.comprador !== filtroComp) return false
+        if (filtroNF === 'com_nf' && !p._recebido) return false
+        if (filtroNF === 'sem_nf' &&  p._recebido) return false
         if (search) {
           const q = search.toLowerCase()
           if (![(p.fornecedor || ''), (p.descricao_produto || ''), String(p.numero_pedido || '')].some(v => v.toLowerCase().includes(q)))
@@ -100,6 +109,15 @@ export default function FollowUp({ pedidos, nfs }) {
               { value: '3', label: '🟡 Embarca em breve' },
               { value: '4', label: '🟡 Entrega em breve' },
               { value: '5', label: '🟢 No prazo' },
+            ]} />
+            <Select value={filtroComp} onChange={setFiltroComp} options={[
+              { value: '', label: 'Todos compradores' },
+              ...compradores.map(c => ({ value: c, label: c.split(' ')[0] }))
+            ]} />
+            <Select value={filtroNF} onChange={setFiltroNF} options={[
+              { value: '',       label: 'Todas as NFs' },
+              { value: 'com_nf', label: '✅ NF recebida' },
+              { value: 'sem_nf', label: '❌ Aguardando NF' },
             ]} />
             <Select value={filtroForn} onChange={setFiltroForn} options={[
               { value: '', label: 'Todos os fornecedores' },
