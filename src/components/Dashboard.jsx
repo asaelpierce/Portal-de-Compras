@@ -219,18 +219,31 @@ export default function Dashboard({ pedidos, nfs, onVerificarEmbarque }) {
     })(),
   })), [pedidos])
 
-  const atrasados  = useMemo(() => enriched.filter(p => p._stEntrega === 'ATRASADO'), [enriched])
-  const breve      = useMemo(() => enriched.filter(p => p._stEntrega === 'EM_BREVE'), [enriched])
-  const prazo      = useMemo(() => enriched.filter(p => p._stEntrega === 'NO_PRAZO'), [enriched])
-  const alertasEmb = useMemo(() => enriched.filter(p => p._stEmbarque === 'ALERTA'), [enriched])
-
-  const unicos = useMemo(() => {
+  // Agrupa por pedido — pior status de cada pedido define o grupo
+  const porPedido = useMemo(() => {
     const map = {}
     enriched.forEach(p => {
-      if (!map[p.numero_pedido]) map[p.numero_pedido] = p
+      const k = String(p.numero_pedido)
+      if (!map[k]) map[k] = { ...p, _itens: [] }
+      map[k]._itens.push(p)
+      // Pior status vence: ATRASADO > ALERTA > EM_BREVE > NO_PRAZO > SEM_DATA
+      const ordem = { ATRASADO:0, ALERTA:1, EM_BREVE:2, NO_PRAZO:3, SEM_DATA:4, ENTREGUE:5 }
+      if ((ordem[p._stEntrega] ?? 9) < (ordem[map[k]._stEntrega] ?? 9)) {
+        map[k]._stEntrega  = p._stEntrega
+        map[k]._diasEntrega = p._diasEntrega
+      }
+      if ((ordem[p._stEmbarque] ?? 9) < (ordem[map[k]._stEmbarque] ?? 9)) {
+        map[k]._stEmbarque = p._stEmbarque
+      }
     })
     return Object.values(map)
   }, [enriched])
+
+  const atrasados  = useMemo(() => porPedido.filter(p => p._stEntrega === 'ATRASADO'), [porPedido])
+  const breve      = useMemo(() => porPedido.filter(p => p._stEntrega === 'EM_BREVE'), [porPedido])
+  const prazo      = useMemo(() => porPedido.filter(p => p._stEntrega === 'NO_PRAZO'), [porPedido])
+  const alertasEmb = useMemo(() => porPedido.filter(p => p._stEmbarque === 'ALERTA'), [porPedido])
+  const unicos     = porPedido
 
   const valor = useMemo(() => enriched.reduce((s, p) => s + (parseFloat(p.valor_total_pedido) || 0), 0), [enriched])
 
@@ -273,19 +286,19 @@ export default function Dashboard({ pedidos, nfs, onVerificarEmbarque }) {
 
       {/* KPIs clicáveis */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14 }}>
-        <KpiCard label="Entrega atrasada" value={atrasados.length}
-          sub={`${Math.round(atrasados.length / (enriched.length || 1) * 100)}% do total pendente`}
+        <KpiCard label="Pedidos atrasados" value={atrasados.length}
+          sub={`${Math.round(atrasados.length / (porPedido.length || 1) * 100)}% dos pedidos em aberto`}
           color={C.danger} icon="🔴" badge="Ação imediata"
-          onClick={() => setPainel({ titulo: `Entregas atrasadas (${atrasados.length})`, pedidos: atrasados })} />
-        <KpiCard label="Vence em 3 dias" value={breve.length}
+          onClick={() => setPainel({ titulo: `Pedidos atrasados (${atrasados.length})`, pedidos: enriched.filter(p => atrasados.some(a => a.numero_pedido === p.numero_pedido)) })} />
+        <KpiCard label="Vence em breve" value={breve.length}
           sub="Requer acompanhamento" color={C.warning} icon="⏰"
-          onClick={() => setPainel({ titulo: `Vence em breve (${breve.length})`, pedidos: breve })} />
+          onClick={() => setPainel({ titulo: `Vence em breve (${breve.length})`, pedidos: enriched.filter(p => breve.some(a => a.numero_pedido === p.numero_pedido)) })} />
         <KpiCard label="No prazo" value={prazo.length}
           sub="Entregas sob controle" color={C.success} icon="✅"
-          onClick={() => setPainel({ titulo: `No prazo (${prazo.length})`, pedidos: prazo })} />
-        <KpiCard label="Pedidos únicos" value={unicos.length}
-          sub={`R$ ${(valor / 1000).toFixed(0)}k em aberto`} color={C.accent} icon="📦"
-          onClick={() => setPainel({ titulo: `Todos os pedidos únicos (${unicos.length})`, pedidos: unicos })} />
+          onClick={() => setPainel({ titulo: `No prazo (${prazo.length})`, pedidos: enriched.filter(p => prazo.some(a => a.numero_pedido === p.numero_pedido)) })} />
+        <KpiCard label="Pedidos em aberto" value={porPedido.length}
+          sub={`R$ ${(valor / 1000).toFixed(0)}k em carteira`} color={C.accent} icon="📦"
+          onClick={() => setPainel({ titulo: `Todos os pedidos (${porPedido.length})`, pedidos: enriched })} />
       </div>
 
       {/* Segunda linha */}
@@ -293,9 +306,9 @@ export default function Dashboard({ pedidos, nfs, onVerificarEmbarque }) {
         <Card>
           <CardTitle>Distribuição de entregas</CardTitle>
           <div style={{ display: 'flex', justifyContent: 'space-around', padding: '8px 0' }}>
-            <StatusRing value={atrasados.length} total={enriched.length} color={C.danger}  label="Atrasado" />
-            <StatusRing value={breve.length}     total={enriched.length} color={C.warning} label="Em breve" />
-            <StatusRing value={prazo.length}     total={enriched.length} color={C.success} label="No prazo" />
+            <StatusRing value={atrasados.length} total={porPedido.length} color={C.danger}  label="Atrasado" />
+            <StatusRing value={breve.length}     total={porPedido.length} color={C.warning} label="Em breve" />
+            <StatusRing value={prazo.length}     total={porPedido.length} color={C.success} label="No prazo" />
           </div>
         </Card>
 
