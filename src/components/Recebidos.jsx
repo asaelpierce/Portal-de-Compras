@@ -33,7 +33,7 @@ export default function Recebidos() {
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true)
-      let all: any[] = []
+      let all = []
       let from = 0
       const pageSize = 1000
       while (true) {
