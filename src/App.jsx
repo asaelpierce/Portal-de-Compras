@@ -27,7 +27,7 @@ const PAGES = [
   { id: 'parcial',     label: 'Entrega parcial',    icon: '📊', group: 'Compras' },
   { id: 'nfs',         label: 'NFs recebidas',      icon: '🧾', group: 'Compras' },
   { id: 'divergencias', label: 'Divergências NF', icon: '🔎', group: 'Análise' },
-  { id: 'cruzamento',  label: 'OC × NF',            icon: '🔗', group: 'Compras' },
+  { id: 'cruzamento',  label: 'OC sem NF',            icon: '🔗', group: 'Compras' },
   { id: 'recebimentos',label: 'Recebimentos',       icon: '📋', group: 'Compras' },
   { id: 'saving',      label: 'Compradores',        icon: '👥', group: 'Análise' },
   { id: 'governanca',  label: 'Governança',         icon: '🔍', group: 'Análise' },

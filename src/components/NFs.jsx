@@ -89,202 +89,176 @@ export function NFsView({ nfs }) {
 }
 
 export function CruzamentoView({ pedidos, nfs }) {
-  const [search, setSearch]     = useState('')
-  const [filtroStatus, setFiltro] = useState('')
-  const [expandido, setExpandido] = useState(null)
+  const [search, setSearch]         = useState('')
+  const [filtroComp, setFiltroComp] = useState('')
+  const [filtroAlerta, setFiltroAlerta] = useState('')
+  const [expandido, setExpandido]   = useState(null)
 
-  // Cruzamento 100% preciso via numero_pedido_oc (TGFVAR)
-  const cruzamento = useMemo(() => {
-    // Índice de NFs por número de pedido OC
-    const nfsPorPedido = {}
+  // Índice de NFs por pedido via TGFVAR
+  const nfsPorPedido = useMemo(() => {
+    const map = {}
     nfs.forEach(n => {
       if (!n.numero_pedido_oc) return
       const k = String(n.numero_pedido_oc)
-      if (!nfsPorPedido[k]) nfsPorPedido[k] = []
-      nfsPorPedido[k].push(n)
+      if (!map[k]) map[k] = []
+      map[k].push(n)
     })
+    return map
+  }, [nfs])
 
-    // Deduplica pedidos por numero_pedido
+  // Deduplica pedidos por numero_pedido
+  const pedidosUnicos = useMemo(() => {
     const map = {}
     pedidos.forEach(p => {
       const k = String(p.numero_pedido)
-      if (!map[k]) map[k] = { ...p, itens: [] }
-      map[k].itens.push(p)
+      if (!map[k]) map[k] = { ...p, _itens: [] }
+      map[k]._itens.push(p)
     })
+    return Object.values(map)
+  }, [pedidos])
 
-    return Object.values(map).map(p => {
-      const nfsVinculadas = nfsPorPedido[String(p.numero_pedido)] || []
-      const qtdRecebida   = nfsVinculadas.reduce((s, n) => s + (parseFloat(n.quantidade_recebida) || 0), 0)
-      const vlrRecebido   = nfsVinculadas.reduce((s, n) => s + (parseFloat(n.valor_item) || 0), 0)
-      const ultimaNF      = [...nfsVinculadas].sort((a, b) => new Date(b.data_recebimento) - new Date(a.data_recebimento))[0]
-      const nfsUnicas     = [...new Map(nfsVinculadas.map(n => [n.numero_nf, n])).values()]
-
-      return {
-        pedido:       p,
-        nfs:          nfsUnicas,
-        totalNFs:     nfsUnicas.length,
-        qtdRecebida,
-        vlrRecebido,
-        ultimaNF,
-        vinculado:    nfsUnicas.length > 0,
-      }
-    }).sort((a, b) => a.vinculado - b.vinculado || 0)
-  }, [pedidos, nfs])
+  // Só os SEM NF vinculada
+  const semNF = useMemo(() => {
+    return pedidosUnicos
+      .map(p => {
+        const nfsVinculadas = nfsPorPedido[String(p.numero_pedido)] || []
+        const qtdEntregue   = parseFloat(p.quantidade_entregue) || 0
+        const qtdPendente   = parseFloat(p.quantidade_pendente) || 0
+        // Alerta especial: Sankhya diz entregue mas sem NF
+        const entregue_sem_nf = qtdEntregue > 0 && nfsVinculadas.length === 0
+        return { ...p, nfsVinculadas, entregue_sem_nf }
+      })
+      .filter(p => p.nfsVinculadas.length === 0)
+      .sort((a, b) => {
+        // Entregue sem NF primeiro
+        if (a.entregue_sem_nf && !b.entregue_sem_nf) return -1
+        if (!a.entregue_sem_nf && b.entregue_sem_nf) return  1
+        return (b.prioridade || 5) - (a.prioridade || 5)
+      })
+  }, [pedidosUnicos, nfsPorPedido])
 
   const kpis = useMemo(() => ({
-    total:       cruzamento.length,
-    comNF:       cruzamento.filter(c => c.vinculado).length,
-    semNF:       cruzamento.filter(c => !c.vinculado).length,
-    vlrRecebido: cruzamento.reduce((s, c) => s + c.vlrRecebido, 0),
-    totalNFs:    nfs.length,
-  }), [cruzamento, nfs])
+    total:          semNF.length,
+    entregue_sem_nf: semNF.filter(p => p.entregue_sem_nf).length,
+    atrasados:       semNF.filter(p => p.prioridade <= 2).length,
+    valor_exposto:   semNF.reduce((s, p) => s + (parseFloat(p.valor_item) || 0), 0),
+  }), [semNF])
 
-  const filtrados = useMemo(() => cruzamento.filter(c => {
-    if (filtroStatus === 'com_nf' && !c.vinculado)  return false
-    if (filtroStatus === 'sem_nf' &&  c.vinculado)  return false
+  const filtrados = useMemo(() => semNF.filter(p => {
+    if (filtroComp  && p.comprador !== filtroComp)       return false
+    if (filtroAlerta === 'entregue_sem_nf' && !p.entregue_sem_nf) return false
+    if (filtroAlerta === 'atrasado' && p.prioridade > 2) return false
     if (search) {
       const q = search.toLowerCase()
-      if (![(c.pedido.fornecedor||''),(c.pedido.descricao_produto||''),String(c.pedido.numero_pedido)].some(v => v.toLowerCase().includes(q))) return false
+      if (![(p.fornecedor||''),(p.descricao_produto||''),String(p.numero_pedido)].some(v => v.toLowerCase().includes(q))) return false
     }
     return true
-  }), [cruzamento, filtroStatus, search])
+  }), [semNF, filtroComp, filtroAlerta, search])
+
+  const compradores = useMemo(() =>
+    [...new Set(semNF.map(p => p.comprador).filter(Boolean))].sort(), [semNF])
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* KPIs */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
         {[
-          { label:'Pedidos em aberto', value:kpis.total,       color:C.accent  },
-          { label:'Com NF vinculada',  value:kpis.comNF,       color:C.success },
-          { label:'Sem NF',            value:kpis.semNF,       color:C.danger  },
-          { label:'NFs recebidas',     value:kpis.totalNFs,    color:C.accent  },
-          { label:'Valor recebido',    value:fmtCurrency(kpis.vlrRecebido), color:C.brand, small:true },
-        ].map((k,i) => (
-          <div key={i} style={{ background:C.surface, border:`1px solid ${C.border}`, borderTop:`3px solid ${k.color}`, borderRadius:10, padding:'12px 14px' }}>
-            <div style={{ fontSize:9, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{k.label}</div>
-            <div style={{ fontSize:k.small?15:24, fontWeight:800, color:C.brand, marginTop:4 }}>{k.value}</div>
+          { label: 'Pedidos sem NF',      value: kpis.total,            color: C.accent  },
+          { label: 'Entregue sem NF ⚠️',  value: kpis.entregue_sem_nf,  color: C.danger  },
+          { label: 'Atrasados',           value: kpis.atrasados,         color: C.warning },
+          { label: 'Valor exposto',       value: fmtCurrency(kpis.valor_exposto), color: C.brand, small: true },
+        ].map((k, i) => (
+          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `3px solid ${k.color}`, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 9, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{k.label}</div>
+            <div style={{ fontSize: k.small ? 15 : 24, fontWeight: 800, color: C.brand, marginTop: 4 }}>{k.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Info */}
-      <div style={{ padding:'8px 14px', background:C.okDim, borderRadius:8, border:`1px solid ${C.success}33`, fontSize:11, color:C.okText }}>
-        ✅ <strong>Vínculo via TGFVAR</strong> — cruzamento 100% preciso pelo campo de origem do documento no Sankhya. Sem aproximações por fornecedor ou produto.
-      </div>
+      {/* Aviso entregue sem NF */}
+      {kpis.entregue_sem_nf > 0 && (
+        <div style={{ padding: '12px 16px', background: C.dangerDim, borderRadius: 8, border: `1px solid ${C.danger}44`, fontSize: 13, color: C.danger, fontWeight: 500 }}>
+          ⚠️ <strong>{kpis.entregue_sem_nf} pedido{kpis.entregue_sem_nf > 1 ? 's' : ''}</strong> com quantidade entregue no Sankhya mas <strong>sem NF vinculada</strong> — verificar lançamento.
+        </div>
+      )}
 
       {/* Filtros */}
-      <div style={{ display:'flex', gap:8 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <SearchInput value={search} onChange={setSearch} placeholder="Pedido, fornecedor, produto..." />
-        <Select value={filtroStatus} onChange={setFiltro} options={[
-          { value:'',       label:'Todos' },
-          { value:'com_nf', label:'✅ Com NF vinculada' },
-          { value:'sem_nf', label:'❌ Sem NF' },
+        <Select value={filtroAlerta} onChange={setFiltroAlerta} options={[
+          { value: '',                label: 'Todos' },
+          { value: 'entregue_sem_nf', label: '⚠️ Entregue sem NF' },
+          { value: 'atrasado',        label: '🔴 Atrasados' },
+        ]} />
+        <Select value={filtroComp} onChange={setFiltroComp} options={[
+          { value: '', label: 'Todos compradores' },
+          ...compradores.map(c => ({ value: c, label: c.split(' ')[0] }))
         ]} />
       </div>
 
       {/* Tabela */}
       <Card>
-        <CardTitle>{filtrados.length} pedidos em aberto</CardTitle>
-        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-          {filtrados.map((c, i) => {
-            const aberto = expandido === i
-            const cor = c.vinculado ? C.success : C.danger
+        <CardTitle>{filtrados.length} pedidos em aberto sem nota fiscal vinculada</CardTitle>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {filtrados.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+              <div style={{ fontSize: 40, marginBottom: 8 }}>🎉</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: C.brand }}>Todos os pedidos têm NF vinculada!</div>
+            </div>
+          ) : filtrados.map((p, i) => {
+            const corBorda = p.entregue_sem_nf ? C.danger : p.prioridade <= 2 ? C.warning : C.border
 
             return (
-              <div key={i} style={{ border:`1px solid ${cor}22`, borderLeft:`4px solid ${cor}`, borderRadius:10, overflow:'hidden' }}>
-                <div
-                  onClick={() => c.nfs.length > 0 && setExpandido(aberto ? null : i)}
-                  style={{
-                    display:'grid', gridTemplateColumns:'120px 1fr 140px 100px 110px 100px 100px',
-                    gap:10, padding:'11px 14px', alignItems:'center',
-                    background: aberto ? '#F0F4FF' : i%2===0 ? C.surface : '#FAFAFA',
-                    cursor: c.nfs.length > 0 ? 'pointer' : 'default',
-                  }}
-                >
-                  {/* Pedido */}
-                  <div>
-                    <span style={{ fontSize:11, color:C.muted }}>{c.nfs.length>0?(aberto?'▼':'▶'):' '}</span>
-                    <span style={{ fontWeight:800, color:C.accent, marginLeft:4 }}>#{c.pedido.numero_pedido}</span>
-                  </div>
-
-                  {/* Fornecedor */}
-                  <div>
-                    <Ellipsis maxWidth={200}>{c.pedido.fornecedor}</Ellipsis>
-                    <div style={{ fontSize:10, color:C.muted, marginTop:1 }}>{c.pedido.comprador?.split(' ')[0]}</div>
-                  </div>
-
-                  {/* Status */}
-                  <span style={{ display:'inline-block', padding:'3px 10px', borderRadius:20, fontSize:11, fontWeight:700,
-                    background: c.vinculado ? C.okDim : C.dangerDim,
-                    color: c.vinculado ? C.okText : C.dangerText,
-                    whiteSpace:'nowrap' }}>
-                    {c.vinculado ? `✅ ${c.totalNFs} NF${c.totalNFs>1?'s':''}` : '❌ Sem NF'}
-                  </span>
-
-                  {/* Última NF */}
-                  <div style={{ fontSize:11, color:C.muted, whiteSpace:'nowrap' }}>
-                    {c.ultimaNF ? fmtDate(c.ultimaNF.data_recebimento) : '—'}
-                  </div>
-
-                  {/* Qtd recebida */}
-                  <div style={{ fontSize:12, textAlign:'center' }}>
-                    {c.qtdRecebida > 0
-                      ? <span style={{ color:C.okText, fontWeight:600 }}>{fmtInt(c.qtdRecebida)}</span>
-                      : <span style={{ color:C.subtle }}>—</span>
-                    }
-                  </div>
-
-                  {/* Valor recebido */}
-                  <div style={{ fontSize:12, fontWeight:600, color:C.brand }}>
-                    {c.vlrRecebido > 0 ? fmtCurrency(c.vlrRecebido) : '—'}
-                  </div>
-
-                  {/* Valor pedido */}
-                  <div style={{ fontSize:12, color:C.muted }}>
-                    {fmtCurrency(c.pedido.valor_item)}
-                  </div>
+              <div key={i} style={{
+                display: 'grid', gridTemplateColumns: '110px 1fr 130px 110px 90px 100px',
+                gap: 12, padding: '11px 16px', alignItems: 'center',
+                background: p.entregue_sem_nf ? C.dangerDim : i % 2 === 0 ? C.surface : '#FAFAFA',
+                border: `1px solid ${corBorda}33`,
+                borderLeft: `4px solid ${corBorda}`,
+                borderRadius: 8,
+              }}>
+                <div>
+                  <span style={{ fontWeight: 800, color: C.accent }}>#{p.numero_pedido}</span>
+                  <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{p.comprador?.split(' ')[0]}</div>
                 </div>
 
-                {/* NFs expandidas */}
-                {aberto && c.nfs.length > 0 && (
-                  <div style={{ background:'#F8FAFF', borderTop:`1px solid ${C.border}`, padding:'10px 14px 10px 32px' }}>
-                    <div style={{ fontSize:10, fontWeight:600, color:C.muted, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:8 }}>
-                      NFs vinculadas — vínculo via TGFVAR (origem do documento)
-                    </div>
-                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-                      <thead>
-                        <tr style={{ background:'#EEF2FF' }}>
-                          {['NF','Produto','Qtd recebida','Valor','Recebimento'].map(h => (
-                            <th key={h} style={{ padding:'6px 10px', textAlign:'left', color:C.muted, fontWeight:600, fontSize:10, textTransform:'uppercase' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {c.nfs.map((n, j) => (
-                          <tr key={j} style={{ borderBottom:`1px solid ${C.border}`, background: j%2?'#F5F7FF':'white' }}>
-                            <td style={{ padding:'7px 10px', fontWeight:700, color:C.accent }}>{n.numero_nf}</td>
-                            <td style={{ padding:'7px 10px', maxWidth:220 }}>
-                              <span title={n.descricao_produto} style={{ display:'block', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{n.descricao_produto}</span>
-                            </td>
-                            <td style={{ padding:'7px 10px', color:C.okText, fontWeight:600 }}>{fmtInt(n.quantidade_recebida)}</td>
-                            <td style={{ padding:'7px 10px', fontWeight:600 }}>{fmtCurrency(n.valor_item)}</td>
-                            <td style={{ padding:'7px 10px', color:C.muted, whiteSpace:'nowrap' }}>{fmtDate(n.data_recebimento)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                <div>
+                  <Ellipsis maxWidth={200}>{p.fornecedor}</Ellipsis>
+                  <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{p.descricao_produto?.substring(0, 40)}</div>
+                </div>
+
+                <div style={{ fontSize: 11 }}>
+                  {p.entregue_sem_nf ? (
+                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: C.dangerDim, color: C.danger }}>
+                      ⚠️ Entregue sem NF
+                    </span>
+                  ) : p.prioridade <= 2 ? (
+                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: C.warnDim, color: C.warning }}>
+                      🔴 Atrasado
+                    </span>
+                  ) : (
+                    <span style={{ display: 'inline-block', padding: '3px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: '#F3F4F6', color: C.muted }}>
+                      Aguardando NF
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>
+                  <div>Qtd pedida: <strong>{fmtInt(p.quantidade_pedida)}</strong></div>
+                  {p.entregue_sem_nf && <div style={{ color: C.danger }}>Entregue: <strong>{fmtInt(p.quantidade_entregue)}</strong></div>}
+                </div>
+
+                <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>
+                  {fmtDate(p.data_prevista_entrega) || '—'}
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.brand, textAlign: 'right' }}>
+                  {fmtCurrency(p.valor_item)}
+                </div>
               </div>
             )
           })}
-          {filtrados.length === 0 && (
-            <div style={{ textAlign:'center', padding:40, color:C.subtle }}>
-              <div style={{ fontSize:36, marginBottom:8 }}>📭</div>
-              <div>Nenhum resultado encontrado</div>
-            </div>
-          )}
         </div>
       </Card>
     </div>
