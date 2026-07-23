@@ -6,6 +6,8 @@ import { fmtCurrency, fmt, fmtInt } from '../lib/utils'
 const CORES = {
   'Leonardo Henriques': '#1D4ED8',
   'Franciele Dias':     '#059669',
+  'Danilo Lopes':       '#7C3AED',
+  'Mariana Andrade':    '#DB2777',
   'Não identificado':   '#94A3B8',
   'Nao identificado':   '#94A3B8',
 }

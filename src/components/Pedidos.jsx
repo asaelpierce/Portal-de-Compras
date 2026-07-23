@@ -67,7 +67,12 @@ function PedidoRow({ pedido, itens, onVerificar, onConfirmarEmbarque, idx }) {
         {/* Pedido # */}
         <td style={{ padding: '11px 10px' }}>
           <div style={{ fontWeight: 800, color: C.accent, fontSize: 14 }}>#{pedido}</div>
-          <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{itens.length} {itens.length === 1 ? 'item' : 'itens'}</div>
+          <div style={{ display:'flex', gap:4, marginTop:1, alignItems:'center' }}>
+            <span style={{ fontSize:10, color:C.muted }}>{itens.length} {itens.length===1?'item':'itens'}</span>
+            {itens[0]?.tipo_pedido === 'importacao' && (
+              <span style={{ fontSize:9, fontWeight:700, padding:'1px 5px', borderRadius:10, background:'#EDE9FE', color:'#7C3AED', border:'1px solid #C4B5FD' }}>✈️ IMP</span>
+            )}
+          </div>
         </td>
         {/* Comprador */}
         <td style={{ padding: '11px 10px' }}><CompradorChip nome={itens[0]?.comprador} /></td>
@@ -353,6 +358,7 @@ export default function Pedidos({ pedidos, onReload }) {
   const [filtroEmbarque, setFiltroEmbarque] = useState('')
   const [filtroForn, setFiltroForn]       = useState('')
   const [filtroComp, setFiltroComp]       = useState('')
+  const [filtroTipo, setFiltroTipo]       = useState('')
   const [modalPedido, setModalPedido]     = useState(null)
   const [abaAtiva, setAbaAtiva]           = useState('lista')
   const [confirmando, setConfirmando]     = useState(null)
@@ -378,8 +384,9 @@ export default function Pedidos({ pedidos, onReload }) {
       .map(([num, itens]) => ({ num, itens, _piorPrioridade: Math.min(...itens.map(i => i.prioridade || 5)) }))
       .filter(({ num, itens }) => {
         // Filtros
-        if (filtroForn && itens[0]?.fornecedor !== filtroForn) return false
-        if (filtroComp && itens[0]?.comprador  !== filtroComp) return false
+        if (filtroForn && itens[0]?.fornecedor  !== filtroForn)  return false
+        if (filtroComp && itens[0]?.comprador   !== filtroComp)  return false
+        if (filtroTipo && itens[0]?.tipo_pedido !== filtroTipo)  return false
         if (filtroEntrega) {
           const st = piorStatus(itens, 'data_prevista_entrega', statusEntrega)
           if (st !== filtroEntrega) return false
@@ -396,7 +403,7 @@ export default function Pedidos({ pedidos, onReload }) {
         return true
       })
       .sort((a, b) => a._piorPrioridade - b._piorPrioridade)
-  }, [pedidos, search, filtroForn, filtroComp, filtroEntrega, filtroEmbarque])
+  }, [pedidos, search, filtroForn, filtroComp, filtroEntrega, filtroEmbarque, filtroTipo])
 
   const handleDecide = async (pedido, decisao) => {
     await supabase.from('alertas_multa').insert({
@@ -471,6 +478,11 @@ export default function Pedidos({ pedidos, onReload }) {
                 { value: 'ALERTA',   label: '🟠 Verificar' },
                 { value: 'EM_BREVE', label: '🟡 Em breve' },
                 { value: 'NO_PRAZO', label: '🟢 No prazo' },
+              ]} />
+              <Select value={filtroTipo} onChange={setFiltroTipo} options={[
+                { value: '',           label: 'Nacional + Importação' },
+                { value: 'nacional',   label: '🇧🇷 Nacional' },
+                { value: 'importacao', label: '✈️ Importação' },
               ]} />
               <Select value={filtroComp} onChange={setFiltroComp} options={[
                 { value: '', label: 'Todos compradores' },
