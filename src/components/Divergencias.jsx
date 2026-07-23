@@ -7,10 +7,16 @@ import { supabase } from '../lib/supabase'
 const SUPABASE_URL = 'https://tocyzucfgwhvpfihakvj.supabase.co'
 
 const TIPOS = {
-  ERRO_LANCAMENTO:   { label: 'Lançamento errado', icon: '⚠️', cor: C.warning, bg: C.warnDim,   desc: 'Valor total bate mas quantidade ou unidade diferem. Material chegou certo, NF lançada errada.' },
-  DIVERGENCIA_PRECO: { label: 'Preço divergente',  icon: '❌', cor: C.danger,  bg: C.dangerDim, desc: 'Valor unitário cobrado diferente do aprovado no pedido. Verificar com fornecedor.' },
-  QTD_MAIOR_OC:      { label: 'Excesso entregue',  icon: '🔴', cor: C.danger,  bg: C.dangerDim, desc: 'Quantidade na NF maior que o pedido. Cobrar devolução ou emitir complemento.' },
-  DIFERENCA_MINIMA:  { label: 'Diferença mínima',  icon: '💬', cor: C.subtle,  bg: '#F3F4F6',   desc: 'Diferença de até R$1,00 — provavelmente arredondamento de impostos. Sem urgência.' },
+  ERRO_LANCAMENTO:   { label: 'Lançamento errado', icon: '⚠️', cor: C.warning, bg: C.warnDim,   desc: 'Valor total bate mas quantidade ou unidade diferem. Material chegou certo, NF foi lançada diferente (ex: em caixa em vez de unidade).' },
+  DIVERGENCIA_PRECO: { label: 'Preço divergente',  icon: '❌', cor: C.danger,  bg: C.dangerDim, desc: 'Preço unitário cobrado na NF é diferente do aprovado no pedido. A diferença abaixo é calculada sobre a quantidade entregue.' },
+  QTD_MAIOR_OC:      { label: 'Excesso entregue',  icon: '🔴', cor: C.danger,  bg: C.dangerDim, desc: 'Quantidade na NF maior que o pedido. Fornecedor entregou e cobrou mais do que foi solicitado.' },
+  DIFERENCA_MINIMA:  { label: 'Diferença mínima',  icon: '💬', cor: C.subtle,  bg: '#F3F4F6',   desc: 'Diferença de até R$1,00 — provavelmente arredondamento de impostos. Sem urgência, mas registrado para transparência.' },
+}
+
+const COBROU = {
+  COBROU_MAIS:  { label: '↑ Cobrou mais',  cor: C.danger,  bg: C.dangerDim },
+  COBROU_MENOS: { label: '↓ Cobrou menos', cor: C.success, bg: C.okDim     },
+  IGUAL:        { label: '= Valor igual',  cor: C.subtle,  bg: '#F3F4F6'   },
 }
 
 const DECISOES = {
@@ -327,10 +333,24 @@ export default function Divergencias() {
                                     <div style={{ fontSize:10, color:C.muted, fontWeight:600, marginBottom:2 }}>NOTA FISCAL</div>
                                     <div>{d.qtd_nf} <strong>{d.unid_nf}</strong> × R$ {d.vlrunit_nf?.toFixed(4)} = <strong>{fmtCurrency(d.vlrtot_nf)}</strong></div>
                                   </div>
-                                  {d.diferenca_total !== 0 && (
+                                  {d.tipo_divergencia !== 'ERRO_LANCAMENTO' && (
                                     <div style={{ alignSelf:'center' }}>
-                                      <div style={{ fontSize:10, color:C.muted, fontWeight:600, marginBottom:2 }}>DIFERENÇA</div>
-                                      <div style={{ fontWeight:700, color:d.diferenca_total>0?C.danger:C.success }}>{d.diferenca_total>0?'+':''}{fmtCurrency(d.diferenca_total)}</div>
+                                      <div style={{ fontSize:10, color:C.muted, fontWeight:600, marginBottom:4 }}>IMPACTO FINANCEIRO</div>
+                                      {d.cobrou && d.cobrou !== 'IGUAL' && (
+                                        <span style={{ display:'inline-block', padding:'2px 10px', borderRadius:20, fontSize:12, fontWeight:700, background:COBROU[d.cobrou]?.bg, color:COBROU[d.cobrou]?.cor, marginBottom:4 }}>
+                                          {COBROU[d.cobrou]?.label}
+                                        </span>
+                                      )}
+                                      {d.diferenca_total !== 0 && (
+                                        <div style={{ fontWeight:800, fontSize:14, color:d.diferenca_total>0?C.danger:C.success }}>
+                                          {d.diferenca_total>0?'+':''}{fmtCurrency(d.diferenca_total)}
+                                        </div>
+                                      )}
+                                      {d.tipo_divergencia==='DIVERGENCIA_PRECO' && d.diferenca_pct>0 && (
+                                        <div style={{ fontSize:11, color:C.muted }}>
+                                          {d.diferenca_pct.toFixed(1)}% {d.cobrou==='COBROU_MAIS'?'acima':'abaixo'} do preço aprovado
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
