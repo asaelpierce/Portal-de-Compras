@@ -48,9 +48,11 @@ export default function App() {
   const { pedidos, nfs, alertasMulta, loading, error, lastSync, reload } =
     useSupplyData({ dataInicio, dataFim })
 
-  const pedidosNacionais   = pedidos.filter(p => p.tipo_pedido !== 'importacao')
-  const pedidosImportacao  = pedidos.filter(p => p.tipo_pedido === 'importacao')
-  const pedidosParciais    = pedidos.filter(p =>
+  // Filtra na raiz — só itens com pendente real (quantidade > 0)
+  const pedidosAtivos    = pedidos.filter(p => parseFloat(p.quantidade_pendente) > 0)
+  const pedidosNacionais = pedidosAtivos.filter(p => p.tipo_pedido !== 'importacao')
+  const pedidosImportacao= pedidosAtivos.filter(p => p.tipo_pedido === 'importacao')
+  const pedidosParciais  = pedidosAtivos.filter(p =>
     parseFloat(p.quantidade_entregue) > 0 && parseFloat(p.quantidade_pendente) > 0
   )
 
@@ -179,21 +181,21 @@ export default function App() {
             </div>
           ) : (
             <>
-              {page === 'dashboard'    && <Dashboard      pedidos={pedidos} nfs={nfs} onVerificarEmbarque={() => setPage('alertas')} />}
-              {page === 'alertas'      && <Alertas         pedidos={pedidos} onReload={reload} />}
-              {page === 'lembretes'    && <Lembretes       pedidos={pedidos} />}
+              {page === 'dashboard'    && <Dashboard      pedidos={pedidosAtivos} nfs={nfs} onVerificarEmbarque={() => setPage('alertas')} />}
+              {page === 'alertas'      && <Alertas         pedidos={pedidosAtivos} onReload={reload} />}
+              {page === 'lembretes'    && <Lembretes       pedidos={pedidosAtivos} />}
               {page === 'pedidos'      && <Pedidos         pedidos={pedidosNacionais} onReload={reload} />}
               {page === 'importacao'   && <Pedidos         pedidos={pedidosImportacao} onReload={reload} isImportacao />}
               {page === 'recebidos'  && <Recebidos />}
               {page === 'parcial'      && <EntregaParcial  pedidos={pedidosParciais} />}
               {page === 'nfs'          && <NFsView         nfs={nfs} />}
-              {page === 'cruzamento'   && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
+              {page === 'cruzamento'   && <CruzamentoView  pedidos={pedidosAtivos} nfs={nfs} />}
               {page === 'recebimentos' && <Recebimentos />}
               {page === 'divergencias' && <Divergencias />}
-              {page === 'saving'       && <SavingDash      pedidos={pedidos} />}
-              {page === 'governanca'   && <Governanca      pedidos={pedidos} />}
-              {page === 'idf'          && <AvaliacaoIDF    pedidos={pedidos} nfs={nfs} />}
-              {page === 'multa'        && <GeradorMulta    pedidos={pedidos} alertasMulta={alertasMulta} onReload={reload} />}
+              {page === 'saving'       && <SavingDash      pedidos={pedidosAtivos} />}
+              {page === 'governanca'   && <Governanca      pedidos={pedidosAtivos} />}
+              {page === 'idf'          && <AvaliacaoIDF    pedidos={pedidosAtivos} nfs={nfs} />}
+              {page === 'multa'        && <GeradorMulta    pedidos={pedidosAtivos} alertasMulta={alertasMulta} onReload={reload} />}
               {page === 'xml'          && <XMLAnalise />}
             </>
           )}
