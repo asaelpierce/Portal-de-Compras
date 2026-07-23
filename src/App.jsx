@@ -187,7 +187,7 @@ export default function App() {
               {page === 'pedidos'      && <Pedidos         pedidos={pedidosNacionais} onReload={reload} />}
               {page === 'importacao'   && <Pedidos         pedidos={pedidosImportacao} onReload={reload} isImportacao />}
               {page === 'recebidos'  && <Recebidos />}
-              {page === 'parcial'      && <EntregaParcial  pedidos={pedidosParciais} />}
+              {page === 'parcial'      && <EntregaParcial  pedidos={pedidosParciais} nfs={nfs} />}
               {page === 'nfs'          && <NFsView         nfs={nfs} />}
               {page === 'cruzamento'   && <CruzamentoView  pedidos={pedidosAtivos} nfs={nfs} />}
               {page === 'recebimentos' && <Recebimentos />}
