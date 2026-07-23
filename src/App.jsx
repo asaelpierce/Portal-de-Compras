@@ -10,6 +10,7 @@ import Alertas from './components/Alertas'
 import EntregaParcial from './components/EntregaParcial'
 import XMLAnalise from './components/XMLAnalise'
 import Recebimentos from './components/Recebimentos'
+import Recebidos from './components/Recebidos'
 import Divergencias from './components/Divergencias'
 import Governanca from './components/Governanca'
 import Lembretes from './components/Lembretes'
@@ -22,6 +23,7 @@ const PAGES = [
   { id: 'lembretes',   label: 'Lembretes',          icon: '🔔', group: 'Visão Geral' },
   { id: 'pedidos',     label: 'Pedidos',            icon: '📦', group: 'Compras' },
   { id: 'importacao',  label: 'Importação',         icon: '✈️', group: 'Compras' },
+  { id: 'recebidos', label: 'Recebidos', icon: '📥', group: 'Compras' },
   { id: 'parcial',     label: 'Entrega parcial',    icon: '📊', group: 'Compras' },
   { id: 'nfs',         label: 'NFs recebidas',      icon: '🧾', group: 'Compras' },
   { id: 'divergencias', label: 'Divergências NF', icon: '🔎', group: 'Análise' },
@@ -182,6 +184,7 @@ export default function App() {
               {page === 'lembretes'    && <Lembretes       pedidos={pedidos} />}
               {page === 'pedidos'      && <Pedidos         pedidos={pedidosNacionais} onReload={reload} />}
               {page === 'importacao'   && <Pedidos         pedidos={pedidosImportacao} onReload={reload} isImportacao />}
+              {page === 'recebidos'  && <Recebidos />}
               {page === 'parcial'      && <EntregaParcial  pedidos={pedidosParciais} />}
               {page === 'nfs'          && <NFsView         nfs={nfs} />}
               {page === 'cruzamento'   && <CruzamentoView  pedidos={pedidos} nfs={nfs} />}
