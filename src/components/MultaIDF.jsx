@@ -356,123 +356,208 @@ function conceito(idf) {
 }
 
 export function AvaliacaoIDF({ pedidos, nfs }) {
-  const [historico, setHistorico] = useState([])
-  const [loadingHist, setLoadingHist] = useState(true)
-  const [filtroGrupo, setFiltroGrupo] = useState('')
-  const [filtroStatus, setFiltroStatusIDF] = useState('')
+  const [encerrados, setEncerrados] = useState([])
+  const [historico, setHistorico]   = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [filtroGrupo, setFiltroGrupo]       = useState('')
+  const [filtroStatus, setFiltroStatusIDF]  = useState('')
 
   useEffect(() => {
-    // Busca histórico de recebimentos com notas calculadas pelo PROC 047
-    const fetchHist = async () => {
-      let all = []
-      let from = 0
-      while (true) {
-        const { data, error } = await supabase
-          .from('idf_historico')
-          .select('fornecedor,grupo_produto,nota,prazo_ok,quantidade_ok,nf_conforme_ok,embalagem_ok,especificacao_ok,condicao_ok,data_recebimento')
-          .range(from, from + 999)
-        if (error || !data || data.length === 0) break
-        all = [...all, ...data]
-        if (data.length < 1000) break
-        from += 1000
-      }
-      setHistorico(all)
-      setLoadingHist(false)
-    }
-    fetchHist()
+    Promise.all([
+      // Pedidos encerrados com data de entrega
+      (async () => {
+        let all = []
+        let from = 0
+        while (true) {
+          const { data, error } = await supabase
+            .from('pedidos_encerrados')
+            .select('numero_pedido,fornecedor,data_prevista_entrega,data_encerramento')
+            .not('data_prevista_entrega', 'is', null)
+            .range(from, from + 999)
+          if (error || !data || !data.length) break
+          all = [...all, ...data]
+          if (data.length < 1000) break
+          from += 1000
+        }
+        return all
+      })(),
+      // Histórico Forms (qualidade)
+      (async () => {
+        let all = []
+        let from = 0
+        while (true) {
+          const { data, error } = await supabase
+            .from('idf_historico')
+            .select('fornecedor,grupo_produto,especificacao_ok,condicao_ok,quantidade_ok,nf_conforme_ok,embalagem_ok')
+            .range(from, from + 999)
+          if (error || !data || !data.length) break
+          all = [...all, ...data]
+          if (data.length < 1000) break
+          from += 1000
+        }
+        return all
+      })(),
+    ]).then(([enc, hist]) => {
+      setEncerrados(enc)
+      setHistorico(hist)
+      setLoading(false)
+    })
   }, [])
 
   const grupos = useMemo(() =>
     [...new Set(historico.map(h => h.grupo_produto).filter(Boolean))].sort()
   , [historico])
 
-  // Calcula IDF por fornecedor usando pesos PROC 047
-  const idfData = useMemo(() => {
-    if (loadingHist) return []
+  // Índice NFs por pedido (primeira entrega)
+  const nfsPorPedido = useMemo(() => {
+    const map = {}
+    nfs.forEach(n => {
+      if (!n.numero_pedido_oc || !n.data_recebimento) return
+      const k = String(n.numero_pedido_oc)
+      if (!map[k] || n.data_recebimento < map[k]) map[k] = n.data_recebimento
+    })
+    return map
+  }, [nfs])
 
+  const idfData = useMemo(() => {
+    if (loading) return []
+
+    // Normaliza nome do fornecedor para agrupar variações
+    const normForn = (nome) => (nome || '').trim().toUpperCase()
+      .replace(/\s+/g, ' ')
+      .replace(/LTDA.*$/, 'LTDA')
+      .replace(/S\.A\..*$/, 'SA')
+
+    // 1. Prazo via Sankhya — por pedido único
+    const prazoPorForn = {}
+    encerrados.forEach(e => {
+      const nomeNorm = normForn(e.fornecedor)
+      const nfData   = nfsPorPedido[String(e.numero_pedido)]
+      if (!nfData) return // sem NF vinculada, não conta
+      if (!prazoPorForn[nomeNorm]) prazoPorForn[nomeNorm] = { nome_orig: e.fornecedor, total: 0, atrasados: 0 }
+      prazoPorForn[nomeNorm].total += 1
+      const dataRec  = new Date(String(nfData).slice(0, 10) + 'T12:00:00')
+      const dataPrev = new Date(String(e.data_prevista_entrega).slice(0, 10) + 'T12:00:00')
+      if (dataRec > dataPrev) prazoPorForn[nomeNorm].atrasados += 1
+    })
+
+    // 2. Qualidade via Forms — por recebimento
     const filtrado = filtroGrupo
       ? historico.filter(h => h.grupo_produto === filtroGrupo)
       : historico
-
-    const map = {}
+    const qualPorForn = {}
     filtrado.forEach(h => {
-      // Normaliza nome do fornecedor (agrupa variações)
-      const nome = (h.fornecedor || '').trim()
-      if (!nome) return
-      if (!map[nome]) map[nome] = {
-        nome, total: 0, soma_nota: 0,
-        prazo_nok: 0, qtd_nok: 0, nf_nok: 0, emb_nok: 0, esp_nok: 0, cond_nok: 0,
-        grupos: new Set(),
-      }
-      map[nome].total += 1
-      map[nome].soma_nota += parseFloat(h.nota) || 100
-      if (h.prazo_ok === false)         map[nome].prazo_nok++
-      if (h.quantidade_ok === false)    map[nome].qtd_nok++
-      if (h.nf_conforme_ok === false)   map[nome].nf_nok++
-      if (h.embalagem_ok === false)     map[nome].emb_nok++
-      if (h.especificacao_ok === false) map[nome].esp_nok++
-      if (h.condicao_ok === false)      map[nome].cond_nok++
-      if (h.grupo_produto) map[nome].grupos.add(h.grupo_produto)
+      const nomeNorm = normForn(h.fornecedor)
+      if (!qualPorForn[nomeNorm]) qualPorForn[nomeNorm] = { nome_orig: h.fornecedor, total: 0, esp_nok: 0, cond_nok: 0, qtd_nok: 0, nf_nok: 0, emb_nok: 0 }
+      qualPorForn[nomeNorm].total += 1
+      if (h.especificacao_ok === false) qualPorForn[nomeNorm].esp_nok++
+      if (h.condicao_ok      === false) qualPorForn[nomeNorm].cond_nok++
+      if (h.quantidade_ok    === false) qualPorForn[nomeNorm].qtd_nok++
+      if (h.nf_conforme_ok   === false) qualPorForn[nomeNorm].nf_nok++
+      if (h.embalagem_ok     === false) qualPorForn[nomeNorm].emb_nok++
     })
 
-    return Object.values(map)
-      .filter(f => f.total >= 1)
-      .map(f => {
-        const idf = parseFloat((f.soma_nota / f.total).toFixed(1))
-        const c = conceito(idf)
-        return {
-          ...f,
-          idf,
-          conceito: c,
-          grupos_str: [...f.grupos].join(', '),
-          // Percentuais de não conformidade por critério
-          pct_prazo: parseFloat((f.prazo_nok / f.total * 100).toFixed(0)),
-          pct_qtd:   parseFloat((f.qtd_nok   / f.total * 100).toFixed(0)),
-          pct_nf:    parseFloat((f.nf_nok    / f.total * 100).toFixed(0)),
-          pct_emb:   parseFloat((f.emb_nok   / f.total * 100).toFixed(0)),
-        }
+    // 3. Combina: IDF Prazo (Sankhya) + IDF Qualidade (Forms)
+    const todos = new Set([...Object.keys(prazoPorForn), ...Object.keys(qualPorForn)])
+    const result = []
+    for (const nomeNorm of todos) {
+      const pz  = prazoPorForn[nomeNorm]
+      const ql  = qualPorForn[nomeNorm]
+      const nome = pz?.nome_orig || ql?.nome_orig || nomeNorm
+
+      // IDF Prazo: % pedidos no prazo (Sankhya) — peso 25%
+      const pct_prazo = pz && pz.total > 0 ? (pz.total - pz.atrasados) / pz.total * 100 : null
+      const idf_prazo = pct_prazo !== null ? pct_prazo : null
+
+      // IDF Qualidade: nota média (Forms) — peso 75%
+      const idf_qual = ql && ql.total > 0 ? (
+        100
+        - (ql.esp_nok  / ql.total * 35)
+        - (ql.cond_nok / ql.total * 5)
+        - (ql.qtd_nok  / ql.total * 15)
+        - (ql.nf_nok   / ql.total * 10)
+        - (ql.emb_nok  / ql.total * 10)
+      ) : null
+
+      // IDF Final — combina os dois se disponíveis
+      let idf
+      if (idf_prazo !== null && idf_qual !== null) {
+        idf = parseFloat((idf_qual * 0.75 + idf_prazo * 0.25).toFixed(1))
+      } else if (idf_prazo !== null) {
+        idf = parseFloat(idf_prazo.toFixed(1))
+      } else if (idf_qual !== null) {
+        idf = parseFloat(idf_qual.toFixed(1))
+      } else continue
+
+      const c = conceito(idf)
+      if (filtroStatus && (
+        (filtroStatus === 'aprovado'  && idf < 71) ||
+        (filtroStatus === 'ressalva'  && (idf < 60 || idf >= 71)) ||
+        (filtroStatus === 'reprovado' && idf >= 60)
+      )) continue
+
+      result.push({
+        nome,
+        // Dados prazo Sankhya
+        total_pedidos:   pz?.total || 0,
+        atrasados_sk:    pz?.atrasados || 0,
+        pct_prazo:       pct_prazo !== null ? parseFloat(pct_prazo.toFixed(1)) : null,
+        tem_sankhya:     pz !== undefined,
+        // Dados qualidade Forms
+        total_forms:     ql?.total || 0,
+        esp_nok:         ql?.esp_nok || 0,
+        qtd_nok:         ql?.qtd_nok || 0,
+        nf_nok:          ql?.nf_nok || 0,
+        emb_nok:         ql?.emb_nok || 0,
+        idf_prazo:       idf_prazo !== null ? parseFloat(idf_prazo.toFixed(1)) : null,
+        idf_qual:        idf_qual  !== null ? parseFloat(idf_qual.toFixed(1))  : null,
+        idf,
+        conceito: c,
       })
-      .filter(f => filtroStatus === '' ||
-        (filtroStatus === 'aprovado'  && f.idf >= 71) ||
-        (filtroStatus === 'ressalva'  && f.idf >= 60 && f.idf < 71) ||
-        (filtroStatus === 'reprovado' && f.idf < 60)
-      )
-      .sort((a, b) => a.idf - b.idf)
-  }, [historico, loadingHist, filtroGrupo, filtroStatus])
+    }
+    return result.sort((a, b) => a.idf - b.idf)
+  }, [encerrados, historico, nfsPorPedido, loading, filtroGrupo, filtroStatus])
 
   const media = idfData.length ? (idfData.reduce((s, f) => s + f.idf, 0) / idfData.length).toFixed(1) : '—'
   const dist = ['Ótimo','Bom','Regular','Insuficiente'].map(l => ({ label: l, count: idfData.filter(f => f.conceito.label === l).length, ...conceito({Ótimo:97,Bom:89,Regular:72,Insuficiente:30}[l]) }))
 
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', borderTop: `3px solid ${C.brand}` }}>
-          <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>IDF Médio</div>
-          <div style={{ fontSize: 32, fontWeight: 700, color: C.brand, marginTop: 6 }}>{media}</div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{conceito(parseFloat(media) || 0).label}</div>
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.accent}`, borderRadius: 10, padding: '12px 14px', gridColumn: 'span 1' }}>
+          <div style={{ fontSize: 9, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fornecedores avaliados</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: C.brand, marginTop: 4 }}>{idfData.length}</div>
+        </div>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.brand}`, borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 9, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>IDF médio</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: C.brand, marginTop: 4 }}>{media}</div>
         </div>
         {dist.map((d, i) => (
-          <div key={i} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', borderTop: `3px solid ${d.border}` }}>
-            <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '0.04em', fontWeight: 600 }}>{d.label}</div>
-            <div style={{ fontSize: 28, fontWeight: 700, color: d.color, marginTop: 6 }}>{d.count}</div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>fornecedores</div>
+          <div key={i} style={{ background: d.bg, border: `1px solid ${d.border}`, borderTop: `3px solid ${d.color}`, borderRadius: 10, padding: '12px 14px' }}>
+            <div style={{ fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: d.color }}>{d.label}</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: d.color, marginTop: 4 }}>{d.count}</div>
           </div>
         ))}
       </div>
+
       <Card>
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14, flexWrap:'wrap', gap:10 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: C.brand }}>Índice de Desempenho do Fornecedor (IDF) — PROC 047</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Pesos PROC 047 · Prazo -25pts (Sankhya onde disponível) · Especificação -35 · Qtd -15 · NF -10 · Embalagem -10 · Condição -5 · {historico.length} recebimentos</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
+              Prazo via Sankhya (por pedido único) · Qualidade via Forms · IDF = Qualidade×75% + Prazo×25%
+            </div>
           </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <select value={filtroGrupo} onChange={e=>setFiltroGrupo(e.target.value)}
-              style={{ padding:'7px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, fontSize:12, color:C.text, outline:'none' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontSize: 12, color: C.text, outline: 'none' }}>
               <option value=''>Todos os grupos</option>
-              {grupos.map(g=><option key={g} value={g}>{g}</option>)}
+              {grupos.map(g => <option key={g} value={g}>{g}</option>)}
             </select>
-            <select value={filtroStatus} onChange={e=>setFiltroStatusIDF(e.target.value)}
-              style={{ padding:'7px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, fontSize:12, color:C.text, outline:'none' }}>
+            <select value={filtroStatus} onChange={e => setFiltroStatusIDF(e.target.value)}
+              style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontSize: 12, color: C.text, outline: 'none' }}>
               <option value=''>Todos</option>
               <option value='aprovado'>🟢 Aprovado (≥71%)</option>
               <option value='ressalva'>🟡 Ressalva (60-70%)</option>
@@ -480,25 +565,37 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
             </select>
           </div>
         </div>
-        <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
-          {[{r:'100',l:'Perfeito',i:100},{r:'71–99',l:'Aprovado',i:85},{r:'60–70',l:'Aprovado c/ ressalva',i:65},{r:'0–59',l:'Reprovado',i:30}].map((c,i) => { const cfg=conceito(c.i); return <span key={i} style={{padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}><strong>{c.r}</strong> — {c.l}</span> })}
+
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+          {[{r:'100',l:'Perfeito',i:100},{r:'71–99',l:'Aprovado',i:85},{r:'60–70',l:'Ressalva',i:65},{r:'0–59',l:'Reprovado',i:30}].map((c,i) => {
+            const cfg = conceito(c.i)
+            return <span key={i} style={{padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}><strong>{c.r}</strong> — {c.l}</span>
+          })}
         </div>
+
         <DataTable
           columns={[
-            {label:'Fornecedor',render:r=><div><div style={{fontWeight:600,color:C.brand}}>{r.nome||'—'}</div><div style={{fontSize:10,color:C.muted}}>{r.grupos_str?.substring(0,40)}</div></div>},
-            {label:'Recebimentos',render:r=><span style={{fontWeight:600,color:C.brand}}>{r.total}</span>},
-            {label:'Atrasos',render:r=><div><span style={{color:r.prazo_nok>0?C.danger:C.okText,fontWeight:600}}>{r.prazo_nok}</span>{r.sankhya_pct>0&&<span style={{fontSize:9,color:C.success,marginLeft:4}}>{r.sankhya_pct}%SKY</span>}</div>},
-            {label:'Qtd errada',render:r=><span style={{color:r.qtd_nok>0?C.warning:C.okText,fontWeight:600}}>{r.qtd_nok}</span>},
-            {label:'NF divergente',render:r=><span style={{color:r.nf_nok>0?C.warning:C.okText,fontWeight:600}}>{r.nf_nok}</span>},
-            {label:'Embalagem',render:r=><span style={{color:r.emb_nok>0?C.warning:C.okText,fontWeight:600}}>{r.emb_nok}</span>},
-            {label:'IDF',render:r=><span style={{display:'inline-block',padding:'4px 14px',borderRadius:20,fontSize:14,fontWeight:800,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span>},
-            {label:'Status',render:r=><span style={{display:'inline-block',padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:600,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span>},
+            { label: 'Fornecedor', render: r => <div><div style={{fontWeight:600,color:C.brand}}>{r.nome}</div>{r.tem_sankhya&&<div style={{fontSize:9,color:C.success}}>✓ Prazo via Sankhya</div>}</div> },
+            { label: 'Pedidos (SKY)', render: r => <span style={{color:C.muted}}>{r.total_pedidos||'—'}</span> },
+            { label: 'Atrasados (SKY)', render: r => <span style={{color:r.atrasados_sk>0?C.danger:C.okText,fontWeight:700}}>{r.tem_sankhya?r.atrasados_sk:'—'}</span> },
+            { label: 'Prazo %', render: r => r.pct_prazo!==null
+              ? <div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:r.pct_prazo>=80?C.success:r.pct_prazo>=60?C.warning:C.danger,width:`${r.pct_prazo}%`}}/></div><span style={{fontSize:11,fontWeight:600,minWidth:38,color:r.pct_prazo>=80?C.okText:r.pct_prazo>=60?C.warning:C.danger}}>{r.pct_prazo}%</span></div>
+              : <span style={{color:C.subtle}}>—</span>
+            },
+            { label: 'Receb. (Forms)', render: r => <span style={{color:C.muted}}>{r.total_forms||'—'}</span> },
+            { label: 'Qtd errada', render: r => <span style={{color:r.qtd_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.qtd_nok:'—'}</span> },
+            { label: 'Embalagem', render: r => <span style={{color:r.emb_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.emb_nok:'—'}</span> },
+            { label: 'IDF Prazo', render: r => r.idf_prazo!==null
+              ? <span style={{fontSize:12,fontWeight:700,color:r.idf_prazo>=80?C.success:r.idf_prazo>=60?C.warning:C.danger}}>{r.idf_prazo}</span>
+              : <span style={{color:C.subtle}}>—</span>
+            },
+            { label: 'IDF Final', render: r => <span style={{display:'inline-block',padding:'4px 12px',borderRadius:20,fontSize:13,fontWeight:800,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span> },
+            { label: 'Status', render: r => <span style={{display:'inline-block',padding:'3px 8px',borderRadius:20,fontSize:11,fontWeight:600,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span> },
           ]}
           rows={idfData}
-          emptyMsg={loadingHist ? 'Carregando histórico...' : 'Nenhum fornecedor encontrado'}
+          emptyMsg={loading ? 'Carregando dados...' : 'Nenhum fornecedor encontrado'}
         />
       </Card>
     </div>
   )
 }
-
