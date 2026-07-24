@@ -422,50 +422,52 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
   const idfData = useMemo(() => {
     if (loading) return []
 
-    // Normaliza nome do fornecedor para agrupar variações
-    const normForn = (nome) => (nome || '').trim().toUpperCase()
-      .replace(/\s+/g, ' ')
-      .replace(/LTDA.*$/, 'LTDA')
-      .replace(/S\.A\..*$/, 'SA')
-
-    // 1. Prazo via Sankhya — usa AD_DTRECEB vs DTPREVENT calculado pelo próprio Sankhya
-    // Campo prazo_sankhya: 'DENTRO DO PRAZO' | 'FORA DO PRAZO' | 'SEM DATA'
-    const prazoPorForn = {}
-    // Deduplica por numero_pedido (pega um item por pedido)
+    // 1. Prazo via Sankhya — por pedido ÚNICO usando cod_fornecedor como chave
+    const prazoPorForn = {}  // key = cod_fornecedor
     const pedidosVistos = new Set()
     encerrados.forEach(e => {
       if (!e.prazo_sankhya || e.prazo_sankhya === 'SEM DATA') return
       if (pedidosVistos.has(e.numero_pedido)) return
       pedidosVistos.add(e.numero_pedido)
-      const nomeNorm = normForn(e.fornecedor)
-      if (!prazoPorForn[nomeNorm]) prazoPorForn[nomeNorm] = { nome_orig: e.fornecedor, total: 0, atrasados: 0 }
-      prazoPorForn[nomeNorm].total += 1
-      if (e.prazo_sankhya === 'FORA DO PRAZO') prazoPorForn[nomeNorm].atrasados += 1
+      const key = String(e.cod_fornecedor || e.fornecedor)
+      if (!prazoPorForn[key]) prazoPorForn[key] = { nome: e.fornecedor, cod: e.cod_fornecedor, total: 0, atrasados: 0 }
+      prazoPorForn[key].total += 1
+      if (e.prazo_sankhya === 'FORA DO PRAZO') prazoPorForn[key].atrasados += 1
     })
 
-    // 2. Qualidade via Forms — por recebimento
+    // 2. Qualidade via Forms — por recebimento (Forms usa nome abreviado)
+    // Só mostra fornecedores que têm dados de prazo do Sankhya
     const filtrado = filtroGrupo
       ? historico.filter(h => h.grupo_produto === filtroGrupo)
       : historico
-    const qualPorForn = {}
+
+    // Agrupa qualidade pelo nome do Sankhya buscando match parcial
+    const qualPorForn = {}  // key = cod_fornecedor do Sankhya
     filtrado.forEach(h => {
-      const nomeNorm = normForn(h.fornecedor)
-      if (!qualPorForn[nomeNorm]) qualPorForn[nomeNorm] = { nome_orig: h.fornecedor, total: 0, esp_nok: 0, cond_nok: 0, qtd_nok: 0, nf_nok: 0, emb_nok: 0 }
-      qualPorForn[nomeNorm].total += 1
-      if (h.especificacao_ok === false) qualPorForn[nomeNorm].esp_nok++
-      if (h.condicao_ok      === false) qualPorForn[nomeNorm].cond_nok++
-      if (h.quantidade_ok    === false) qualPorForn[nomeNorm].qtd_nok++
-      if (h.nf_conforme_ok   === false) qualPorForn[nomeNorm].nf_nok++
-      if (h.embalagem_ok     === false) qualPorForn[nomeNorm].emb_nok++
+      const nomeFormsTrim = (h.fornecedor || '').trim().toUpperCase()
+      // Tenta encontrar o fornecedor no Sankhya por match parcial do nome
+      const matchKey = Object.keys(prazoPorForn).find(k => {
+        const nomeSK = (prazoPorForn[k].nome || '').toUpperCase()
+        return nomeSK.includes(nomeFormsTrim) || nomeFormsTrim.includes(nomeSK.split(' ')[0])
+      })
+      const key = matchKey || ('FORMS_' + nomeFormsTrim)
+      if (!qualPorForn[key]) qualPorForn[key] = { nome_forms: h.fornecedor, total: 0, esp_nok: 0, cond_nok: 0, qtd_nok: 0, nf_nok: 0, emb_nok: 0 }
+      qualPorForn[key].total += 1
+      if (h.especificacao_ok === false) qualPorForn[key].esp_nok++
+      if (h.condicao_ok      === false) qualPorForn[key].cond_nok++
+      if (h.quantidade_ok    === false) qualPorForn[key].qtd_nok++
+      if (h.nf_conforme_ok   === false) qualPorForn[key].nf_nok++
+      if (h.embalagem_ok     === false) qualPorForn[key].emb_nok++
     })
 
-    // 3. Combina: IDF Prazo (Sankhya) + IDF Qualidade (Forms)
+    // 3. Combina — base são os fornecedores do Sankhya (prazo real)
+    // Forms complementa com dados de qualidade onde houver match
     const todos = new Set([...Object.keys(prazoPorForn), ...Object.keys(qualPorForn)])
     const result = []
-    for (const nomeNorm of todos) {
-      const pz  = prazoPorForn[nomeNorm]
-      const ql  = qualPorForn[nomeNorm]
-      const nome = pz?.nome_orig || ql?.nome_orig || nomeNorm
+    for (const key of todos) {
+      const pz  = prazoPorForn[key]
+      const ql  = qualPorForn[key]
+      const nome = pz?.nome || ql?.nome_forms || key
 
       // IDF Prazo: % pedidos no prazo (Sankhya) — peso 25%
       const pct_prazo = pz && pz.total > 0 ? (pz.total - pz.atrasados) / pz.total * 100 : null
