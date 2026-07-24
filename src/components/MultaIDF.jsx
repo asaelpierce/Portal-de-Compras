@@ -371,7 +371,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
         while (true) {
           const { data, error } = await supabase
             .from('pedidos_encerrados')
-            .select('numero_pedido,fornecedor,data_prevista_entrega,data_encerramento')
+            .select('numero_pedido,fornecedor,data_prevista_entrega,data_encerramento,prazo_sankhya')
             .not('data_prevista_entrega', 'is', null)
             .range(from, from + 999)
           if (error || !data || !data.length) break
@@ -428,17 +428,19 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
       .replace(/LTDA.*$/, 'LTDA')
       .replace(/S\.A\..*$/, 'SA')
 
-    // 1. Prazo via Sankhya — por pedido único
+    // 1. Prazo via Sankhya — usa AD_DTRECEB vs DTPREVENT calculado pelo próprio Sankhya
+    // Campo prazo_sankhya: 'DENTRO DO PRAZO' | 'FORA DO PRAZO' | 'SEM DATA'
     const prazoPorForn = {}
+    // Deduplica por numero_pedido (pega um item por pedido)
+    const pedidosVistos = new Set()
     encerrados.forEach(e => {
+      if (!e.prazo_sankhya || e.prazo_sankhya === 'SEM DATA') return
+      if (pedidosVistos.has(e.numero_pedido)) return
+      pedidosVistos.add(e.numero_pedido)
       const nomeNorm = normForn(e.fornecedor)
-      const nfData   = nfsPorPedido[String(e.numero_pedido)]
-      if (!nfData) return // sem NF vinculada, não conta
       if (!prazoPorForn[nomeNorm]) prazoPorForn[nomeNorm] = { nome_orig: e.fornecedor, total: 0, atrasados: 0 }
       prazoPorForn[nomeNorm].total += 1
-      const dataRec  = new Date(String(nfData).slice(0, 10) + 'T12:00:00')
-      const dataPrev = new Date(String(e.data_prevista_entrega).slice(0, 10) + 'T12:00:00')
-      if (dataRec > dataPrev) prazoPorForn[nomeNorm].atrasados += 1
+      if (e.prazo_sankhya === 'FORA DO PRAZO') prazoPorForn[nomeNorm].atrasados += 1
     })
 
     // 2. Qualidade via Forms — por recebimento
