@@ -463,7 +463,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14, flexWrap:'wrap', gap:10 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: C.brand }}>Índice de Desempenho do Fornecedor (IDF) — PROC 047</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Nota = 100 − penalidades · Prazo -25 · Qtd -15 · Especificação -35 · NF -10 · Embalagem -10 · Condição -5 · {historico.length} recebimentos</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Pesos PROC 047 · Prazo -25pts (Sankhya onde disponível) · Especificação -35 · Qtd -15 · NF -10 · Embalagem -10 · Condição -5 · {historico.length} recebimentos</div>
           </div>
           <div style={{ display:'flex', gap:8 }}>
             <select value={filtroGrupo} onChange={e=>setFiltroGrupo(e.target.value)}
@@ -487,7 +487,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
           columns={[
             {label:'Fornecedor',render:r=><div><div style={{fontWeight:600,color:C.brand}}>{r.nome||'—'}</div><div style={{fontSize:10,color:C.muted}}>{r.grupos_str?.substring(0,40)}</div></div>},
             {label:'Recebimentos',render:r=><span style={{fontWeight:600,color:C.brand}}>{r.total}</span>},
-            {label:'Atrasos',render:r=><span style={{color:r.prazo_nok>0?C.danger:C.okText,fontWeight:600}}>{r.prazo_nok}</span>},
+            {label:'Atrasos',render:r=><div><span style={{color:r.prazo_nok>0?C.danger:C.okText,fontWeight:600}}>{r.prazo_nok}</span>{r.sankhya_pct>0&&<span style={{fontSize:9,color:C.success,marginLeft:4}}>{r.sankhya_pct}%SKY</span>}</div>},
             {label:'Qtd errada',render:r=><span style={{color:r.qtd_nok>0?C.warning:C.okText,fontWeight:600}}>{r.qtd_nok}</span>},
             {label:'NF divergente',render:r=><span style={{color:r.nf_nok>0?C.warning:C.okText,fontWeight:600}}>{r.nf_nok}</span>},
             {label:'Embalagem',render:r=><span style={{color:r.emb_nok>0?C.warning:C.okText,fontWeight:600}}>{r.emb_nok}</span>},
