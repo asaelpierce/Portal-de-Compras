@@ -356,79 +356,89 @@ function conceito(idf) {
 }
 
 export function AvaliacaoIDF({ pedidos, nfs }) {
-  const [encerrados, setEncerrados] = useState([])
-  const [loadingEnc, setLoadingEnc] = useState(true)
+  const [historico, setHistorico] = useState([])
+  const [loadingHist, setLoadingHist] = useState(true)
+  const [filtroGrupo, setFiltroGrupo] = useState('')
+  const [filtroStatus, setFiltroStatusIDF] = useState('')
 
   useEffect(() => {
-    // Busca pedidos encerrados para calcular IDF com histórico completo
-    const fetchEnc = async () => {
+    // Busca histórico de recebimentos com notas calculadas pelo PROC 047
+    const fetchHist = async () => {
       let all = []
       let from = 0
       while (true) {
         const { data, error } = await supabase
-          .from('pedidos_encerrados')
-          .select('numero_pedido,fornecedor,cod_fornecedor,data_prevista_entrega,data_encerramento,comprador')
-          .eq('tipo_encerramento', 'VALOR_NF')
+          .from('idf_historico')
+          .select('fornecedor,grupo_produto,nota,prazo_ok,quantidade_ok,nf_conforme_ok,embalagem_ok,especificacao_ok,condicao_ok,data_recebimento')
           .range(from, from + 999)
         if (error || !data || data.length === 0) break
         all = [...all, ...data]
         if (data.length < 1000) break
         from += 1000
       }
-      setEncerrados(all)
-      setLoadingEnc(false)
+      setHistorico(all)
+      setLoadingHist(false)
     }
-    fetchEnc()
+    fetchHist()
   }, [])
+
+  const grupos = useMemo(() =>
+    [...new Set(historico.map(h => h.grupo_produto).filter(Boolean))].sort()
+  , [historico])
+
+  // Calcula IDF por fornecedor usando pesos PROC 047
   const idfData = useMemo(() => {
-    if (loadingEnc) return []
+    if (loadingHist) return []
 
-    // Índice de NFs por pedido via TGFVAR
-    const nfsPorPedido = {}
-    nfs.forEach(n => {
-      if (!n.numero_pedido_oc) return
-      const k = String(n.numero_pedido_oc)
-      if (!nfsPorPedido[k]) nfsPorPedido[k] = []
-      nfsPorPedido[k].push(n)
-    })
+    const filtrado = filtroGrupo
+      ? historico.filter(h => h.grupo_produto === filtroGrupo)
+      : historico
 
-    // Usa pedidos ENCERRADOS como base — são os que foram de fato entregues
     const map = {}
-    encerrados.forEach(p => {
-      const key = String(p.cod_fornecedor || p.fornecedor)
-      if (!map[key]) map[key] = {
-        nome: p.fornecedor, cod: p.cod_fornecedor,
-        total: 0, no_prazo: 0, com_nf: 0,
+    filtrado.forEach(h => {
+      // Normaliza nome do fornecedor (agrupa variações)
+      const nome = (h.fornecedor || '').trim()
+      if (!nome) return
+      if (!map[nome]) map[nome] = {
+        nome, total: 0, soma_nota: 0,
+        prazo_nok: 0, qtd_nok: 0, nf_nok: 0, emb_nok: 0, esp_nok: 0, cond_nok: 0,
+        grupos: new Set(),
       }
-      map[key].total += 1
-
-      // Verifica se tem NF vinculada
-      const nfsList = nfsPorPedido[String(p.numero_pedido)] || []
-      if (nfsList.length > 0) {
-        map[key].com_nf += 1
-        // Verifica se a NF chegou dentro do prazo
-        if (p.data_prevista_entrega) {
-          const nf = [...nfsList].sort((a, b) => new Date(a.data_recebimento) - new Date(b.data_recebimento))[0]
-          const recStr  = String(nf.data_recebimento || '').slice(0, 10)
-          const prevStr = String(p.data_prevista_entrega || '').slice(0, 10)
-          if (recStr && prevStr && recStr <= prevStr) {
-            map[key].no_prazo += 1
-          }
-        }
-      }
+      map[nome].total += 1
+      map[nome].soma_nota += parseFloat(h.nota) || 100
+      if (h.prazo_ok === false)         map[nome].prazo_nok++
+      if (h.quantidade_ok === false)    map[nome].qtd_nok++
+      if (h.nf_conforme_ok === false)   map[nome].nf_nok++
+      if (h.embalagem_ok === false)     map[nome].emb_nok++
+      if (h.especificacao_ok === false) map[nome].esp_nok++
+      if (h.condicao_ok === false)      map[nome].cond_nok++
+      if (h.grupo_produto) map[nome].grupos.add(h.grupo_produto)
     })
 
     return Object.values(map)
       .filter(f => f.total >= 1)
       .map(f => {
-        // IDF = (% no prazo × 80%) + (% com NF × 20%)
-        const cp  = f.total > 0 ? parseFloat((f.no_prazo / f.total * 100).toFixed(1)) : 0
-        const cq  = f.total > 0 ? parseFloat((f.com_nf  / f.total * 100).toFixed(1)) : 0
-        const idf = parseFloat(((cp * 0.8) + (cq * 0.2)).toFixed(1))
-        return { ...f, cp, cq, idf, conceito: conceito(idf) }
+        const idf = parseFloat((f.soma_nota / f.total).toFixed(1))
+        const c = conceito(idf)
+        return {
+          ...f,
+          idf,
+          conceito: c,
+          grupos_str: [...f.grupos].join(', '),
+          // Percentuais de não conformidade por critério
+          pct_prazo: parseFloat((f.prazo_nok / f.total * 100).toFixed(0)),
+          pct_qtd:   parseFloat((f.qtd_nok   / f.total * 100).toFixed(0)),
+          pct_nf:    parseFloat((f.nf_nok    / f.total * 100).toFixed(0)),
+          pct_emb:   parseFloat((f.emb_nok   / f.total * 100).toFixed(0)),
+        }
       })
+      .filter(f => filtroStatus === '' ||
+        (filtroStatus === 'aprovado'  && f.idf >= 71) ||
+        (filtroStatus === 'ressalva'  && f.idf >= 60 && f.idf < 71) ||
+        (filtroStatus === 'reprovado' && f.idf < 60)
+      )
       .sort((a, b) => a.idf - b.idf)
-  }, [encerrados, nfs, loadingEnc])
+  }, [historico, loadingHist, filtroGrupo, filtroStatus])
 
   const media = idfData.length ? (idfData.reduce((s, f) => s + f.idf, 0) / idfData.length).toFixed(1) : '—'
   const dist = ['Ótimo','Bom','Regular','Insuficiente'].map(l => ({ label: l, count: idfData.filter(f => f.conceito.label === l).length, ...conceito({Ótimo:97,Bom:89,Regular:72,Insuficiente:30}[l]) }))
@@ -450,30 +460,45 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
         ))}
       </div>
       <Card>
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: C.brand }}>Índice de Desempenho do Fornecedor (IDF)</div>
-          <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>IDF = (CP × 80%) + (CQ × 20%) · Metodologia OTIF</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14, flexWrap:'wrap', gap:10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.brand }}>Índice de Desempenho do Fornecedor (IDF) — PROC 047</div>
+            <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Nota = 100 − penalidades · Prazo -25 · Qtd -15 · Especificação -35 · NF -10 · Embalagem -10 · Condição -5 · {historico.length} recebimentos</div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <select value={filtroGrupo} onChange={e=>setFiltroGrupo(e.target.value)}
+              style={{ padding:'7px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, fontSize:12, color:C.text, outline:'none' }}>
+              <option value=''>Todos os grupos</option>
+              {grupos.map(g=><option key={g} value={g}>{g}</option>)}
+            </select>
+            <select value={filtroStatus} onChange={e=>setFiltroStatusIDF(e.target.value)}
+              style={{ padding:'7px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, fontSize:12, color:C.text, outline:'none' }}>
+              <option value=''>Todos</option>
+              <option value='aprovado'>🟢 Aprovado (≥71%)</option>
+              <option value='ressalva'>🟡 Ressalva (60-70%)</option>
+              <option value='reprovado'>🔴 Reprovado (&lt;60%)</option>
+            </select>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          {[{r:'95–100',l:'Ótimo',i:97},{r:'85–94',l:'Bom',i:89},{r:'60–84',l:'Regular',i:72},{r:'0–59',l:'Insuficiente',i:30}].map((c,i) => { const cfg=conceito(c.i); return <span key={i} style={{padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}><strong>{c.r}</strong> — {c.l}</span> })}
+        <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
+          {[{r:'100',l:'Perfeito',i:100},{r:'71–99',l:'Aprovado',i:85},{r:'60–70',l:'Aprovado c/ ressalva',i:65},{r:'0–59',l:'Reprovado',i:30}].map((c,i) => { const cfg=conceito(c.i); return <span key={i} style={{padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}><strong>{c.r}</strong> — {c.l}</span> })}
         </div>
         <DataTable
           columns={[
-            {label:'Fornecedor',render:r=><span style={{fontWeight:500}}>{r.nome||'—'}</span>},
-            {label:'Programadas',render:r=><span style={{color:C.muted}}>{r.prog}</span>},
-            {label:'No prazo',render:r=><span style={{color:C.okText,fontWeight:600}}>{r.prazo}</span>},
-            {label:'Pedidos',render:r=><span style={{fontWeight:600,color:C.brand}}>{r.total}</span>},
-            {label:'No prazo',render:r=><span style={{color:C.okText,fontWeight:600}}>{r.no_prazo}</span>},
-            {label:'Com NF',render:r=><span style={{color:C.accent,fontWeight:600}}>{r.com_nf}</span>},
-            {label:'CP (prazo %)',render:r=>(<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:r.cp>=80?C.success:r.cp>=60?C.warning:C.danger,width:`${r.cp}%`}}/></div><span style={{fontSize:12,fontWeight:600,color:r.cp>=80?C.okText:r.cp>=60?C.warnText:C.dangerText,minWidth:38}}>{r.cp}%</span></div>)},
-            {label:'CQ (NF %)',render:r=>(<div style={{display:'flex',alignItems:'center',gap:8}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:C.accent,width:`${r.cq}%`}}/></div><span style={{fontSize:12,fontWeight:600,color:C.accent,minWidth:38}}>{r.cq}%</span></div>)},
-            {label:'IDF',render:r=><span style={{display:'inline-block',padding:'4px 12px',borderRadius:20,fontSize:13,fontWeight:700,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span>},
-            {label:'Conceito',render:r=><span style={{display:'inline-block',padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span>},
+            {label:'Fornecedor',render:r=><div><div style={{fontWeight:600,color:C.brand}}>{r.nome||'—'}</div><div style={{fontSize:10,color:C.muted}}>{r.grupos_str?.substring(0,40)}</div></div>},
+            {label:'Recebimentos',render:r=><span style={{fontWeight:600,color:C.brand}}>{r.total}</span>},
+            {label:'Atrasos',render:r=><span style={{color:r.prazo_nok>0?C.danger:C.okText,fontWeight:600}}>{r.prazo_nok}</span>},
+            {label:'Qtd errada',render:r=><span style={{color:r.qtd_nok>0?C.warning:C.okText,fontWeight:600}}>{r.qtd_nok}</span>},
+            {label:'NF divergente',render:r=><span style={{color:r.nf_nok>0?C.warning:C.okText,fontWeight:600}}>{r.nf_nok}</span>},
+            {label:'Embalagem',render:r=><span style={{color:r.emb_nok>0?C.warning:C.okText,fontWeight:600}}>{r.emb_nok}</span>},
+            {label:'IDF',render:r=><span style={{display:'inline-block',padding:'4px 14px',borderRadius:20,fontSize:14,fontWeight:800,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span>},
+            {label:'Status',render:r=><span style={{display:'inline-block',padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:600,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span>},
           ]}
           rows={idfData}
-          emptyMsg={loadingEnc ? "Carregando histórico de pedidos..." : "Nenhum fornecedor com pedidos encerrados encontrado"}
+          emptyMsg={loadingHist ? 'Carregando histórico...' : 'Nenhum fornecedor encontrado'}
         />
       </Card>
     </div>
   )
 }
+
