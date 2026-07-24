@@ -361,6 +361,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
   const [loading, setLoading]       = useState(true)
   const [filtroGrupo, setFiltroGrupo]       = useState('')
   const [filtroStatus, setFiltroStatusIDF]  = useState('')
+  const [search, setSearch]                 = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -519,8 +520,10 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
         conceito: c,
       })
     }
-    return result.sort((a, b) => a.idf - b.idf)
-  }, [encerrados, historico, nfsPorPedido, loading, filtroGrupo, filtroStatus])
+    return result
+      .filter(f => !search || f.nome.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => a.idf - b.idf)
+  }, [encerrados, historico, nfsPorPedido, loading, filtroGrupo, filtroStatus, search])
 
   const media = idfData.length ? (idfData.reduce((s, f) => s + f.idf, 0) / idfData.length).toFixed(1) : '—'
   const dist = ['Ótimo','Bom','Regular','Insuficiente'].map(l => ({ label: l, count: idfData.filter(f => f.conceito.label === l).length, ...conceito({Ótimo:97,Bom:89,Regular:72,Insuficiente:30}[l]) }))
@@ -554,7 +557,12 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
               Prazo via Sankhya (por pedido único) · Qualidade via Forms · IDF = Qualidade×75% + Prazo×25%
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <input
+              value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="🔍 Buscar fornecedor..."
+              style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontSize: 12, color: C.text, outline: 'none', minWidth: 200 }}
+            />
             <select value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}
               style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontSize: 12, color: C.text, outline: 'none' }}>
               <option value=''>Todos os grupos</option>
@@ -562,11 +570,17 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
             </select>
             <select value={filtroStatus} onChange={e => setFiltroStatusIDF(e.target.value)}
               style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontSize: 12, color: C.text, outline: 'none' }}>
-              <option value=''>Todos</option>
+              <option value=''>Todos os status</option>
               <option value='aprovado'>🟢 Aprovado (≥71%)</option>
               <option value='ressalva'>🟡 Ressalva (60-70%)</option>
               <option value='reprovado'>🔴 Reprovado (&lt;60%)</option>
             </select>
+            {(search || filtroGrupo || filtroStatus) && (
+              <button onClick={() => { setSearch(''); setFiltroGrupo(''); setFiltroStatusIDF('') }}
+                style={{ padding: '7px 12px', borderRadius: 8, border: `1px solid ${C.border}`, background: C.bg, fontSize: 12, color: C.muted, cursor: 'pointer' }}>
+                ✕ Limpar
+              </button>
+            )}
           </div>
         </div>
 
