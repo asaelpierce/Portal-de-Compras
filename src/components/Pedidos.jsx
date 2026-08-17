@@ -3,6 +3,7 @@ import { Card, CardTitle, SearchInput, Select, Badge, Ellipsis, Pill, ModalMulta
 import { C, STATUS_EMBARQUE, STATUS_ENTREGA } from '../lib/tokens'
 import { fmtDate, fmtCurrency, fmtInt, diasDiferenca, statusEmbarque, statusEntrega } from '../lib/utils'
 import { supabase } from '../lib/supabase'
+import { BtnSankhya } from '../lib/sankhya.jsx'
 
 const CORES_COMP = { 'Leonardo Henriques': '#1D4ED8', 'Franciele Dias': '#059669' }
 
@@ -115,6 +116,12 @@ function PedidoRow({ pedido, itens, onVerificar, onConfirmarEmbarque, idx }) {
                 ✓ Embarcou
               </button>
             )}
+            <BtnSankhya
+              nunota={itens[0]?.nunota || pedido.numero_pedido}
+              tipmov="O"
+              codtipoper={itens[0]?.codtipoper}
+              label="SK"
+            />
           </div>
         </td>
       </tr>

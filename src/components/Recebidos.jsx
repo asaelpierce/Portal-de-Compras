@@ -3,6 +3,7 @@ import { Card, CardTitle, SearchInput, Select, Ellipsis } from './UI'
 import { C } from '../lib/tokens'
 import { fmtDate, fmtCurrency } from '../lib/utils'
 import { supabase } from '../lib/supabase'
+import { BtnSankhya } from '../lib/sankhya.jsx'
 
 const TIPOS = {
   VALOR_NF: {
@@ -194,6 +195,7 @@ export default function Recebidos() {
                     <div>
                       <span style={{ fontSize: 11, color: C.muted }}>{aberto ? '▼' : '▶'}</span>
                       <span style={{ fontWeight: 800, color: C.accent, marginLeft: 4 }}>#{p.numero_pedido}</span>
+                      <BtnSankhya nunota={p.numero_pedido} tipmov="O" label="SK" style={{ marginLeft: 6 }} />
                       <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{p.itens.length} {p.itens.length === 1 ? 'item' : 'itens'}</div>
                     </div>
 
