@@ -117,7 +117,7 @@ function PedidoRow({ pedido, itens, onVerificar, onConfirmarEmbarque, idx }) {
               </button>
             )}
             <BtnSankhya
-              nunota={itens[0]?.nunota || pedido.numero_pedido}
+              nunota={itens[0]?.nunota}
               tipmov="O"
               codtipoper={itens[0]?.codtipoper}
               label="SK"
