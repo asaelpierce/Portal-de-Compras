@@ -5,6 +5,7 @@ import Pedidos from './components/Pedidos'
 import FollowUp from './components/FollowUp'
 import { NFsView, CruzamentoView } from './components/NFs'
 import { GeradorMulta, AvaliacaoIDF } from './components/MultaIDF'
+import ADF from './components/ADF'
 import SavingDash from './components/SavingDash'
 import Alertas from './components/Alertas'
 import EntregaParcial from './components/EntregaParcial'
@@ -32,6 +33,7 @@ const PAGES = [
   { id: 'saving',      label: 'Compradores',        icon: '👥', group: 'Análise' },
   { id: 'governanca',  label: 'Governança',         icon: '🔍', group: 'Análise' },
   { id: 'idf',         label: 'IDF Fornecedores',   icon: '📈', group: 'Análise' },
+  { id: 'adf',         label: 'ADF Semestral',      icon: '📋', group: 'Análise' },
   { id: 'multa',       label: 'Multa',              icon: '⚠️', group: 'Análise' },
   { id: 'xml',         label: 'Analisador XML',     icon: '🤖', group: 'Análise' },
 ]
@@ -195,6 +197,7 @@ export default function App() {
               {page === 'saving'       && <SavingDash      pedidos={pedidosAtivos} />}
               {page === 'governanca'   && <Governanca      pedidos={pedidosAtivos} />}
               {page === 'idf'          && <AvaliacaoIDF    pedidos={pedidosAtivos} nfs={nfs} />}
+              {page === 'adf'          && <ADF />}
               {page === 'multa'        && <GeradorMulta    pedidos={pedidosAtivos} alertasMulta={alertasMulta} onReload={reload} />}
               {page === 'xml'          && <XMLAnalise />}
             </>
