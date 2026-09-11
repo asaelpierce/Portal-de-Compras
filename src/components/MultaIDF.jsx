@@ -362,6 +362,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
   const [filtroGrupo, setFiltroGrupo]       = useState('')
   const [filtroStatus, setFiltroStatusIDF]  = useState('')
   const [search, setSearch]                 = useState('')
+  const [mostraMetodo, setMostraMetodo]     = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -556,6 +557,14 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
             <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>
               Prazo via Sankhya (por pedido único) · Qualidade via Forms · IDF = Qualidade×75% + Prazo×25%
             </div>
+            <button onClick={() => setMostraMetodo(m => !m)} style={{
+              marginTop: 8, padding: '5px 12px', borderRadius: 7,
+              border: `1px solid ${C.accent}`, background: mostraMetodo ? C.accent : C.accentDim,
+              color: mostraMetodo ? 'white' : C.accentText,
+              fontSize: 11, cursor: 'pointer', fontWeight: 600,
+            }}>
+              {mostraMetodo ? '▼' : '▶'} Como o IDF é calculado
+            </button>
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <input
@@ -583,6 +592,89 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
             )}
           </div>
         </div>
+
+        {mostraMetodo && (
+          <div style={{ marginBottom: 16, padding: '16px 18px', background: '#F8FAFF', border: `1px solid ${C.accent}33`, borderRadius: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+              {/* Prazo */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.brand, marginBottom: 8 }}>
+                  ⏱ IDF PRAZO — peso 25%
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.7, marginBottom: 8 }}>
+                  Fonte: <strong>Sankhya</strong>. O sistema compara a data real de recebimento
+                  (<code style={{background:'#EEF2FF',padding:'1px 4px',borderRadius:3}}>AD_DTRECEB</code>) com a data prevista de entrega
+                  (<code style={{background:'#EEF2FF',padding:'1px 4px',borderRadius:3}}>DTPREVENT</code>).
+                  Cada pedido conta <strong>uma única vez</strong>, independente de quantos itens tenha.
+                </div>
+                <div style={{ padding: '8px 12px', background: 'white', borderRadius: 6, border: `1px solid ${C.border}`, fontSize: 11, fontFamily: 'monospace', color: C.brand }}>
+                  IDF Prazo = (pedidos no prazo ÷ total) × 100
+                </div>
+              </div>
+
+              {/* Qualidade */}
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.brand, marginBottom: 8 }}>
+                  ✅ IDF QUALIDADE — peso 75%
+                </div>
+                <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.7, marginBottom: 8 }}>
+                  Fonte: <strong>Formulário de recebimento</strong> preenchido pelo almoxarifado.
+                  Cada não conformidade desconta o peso proporcional à frequência com que ocorre.
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {[
+                    ['Especificação técnica', 35, C.danger],
+                    ['Conformidade quantitativa', 15, C.warning],
+                    ['Nota fiscal conforme OC', 10, C.warning],
+                    ['Embalagem', 10, C.warning],
+                    ['Condição do material', 5, C.subtle],
+                  ].map(([label, peso, cor], i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                      <div style={{ flex: 1, color: C.text }}>{label}</div>
+                      <div style={{ width: 60, height: 6, background: C.border, borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ width: `${peso / 35 * 100}%`, height: '100%', background: cor }} />
+                      </div>
+                      <div style={{ width: 34, textAlign: 'right', fontWeight: 700, color: cor }}>−{peso}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Fórmula final */}
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}` }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.brand, marginBottom: 8 }}>📐 IDF FINAL</div>
+              <div style={{ padding: '10px 14px', background: C.brand, borderRadius: 8, fontSize: 13, fontFamily: 'monospace', color: 'white', fontWeight: 600, textAlign: 'center' }}>
+                IDF = (Qualidade × 0,75) + (Prazo × 0,25)
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+                {[
+                  ['100', 'Perfeito — nenhum desvio', C.success],
+                  ['71 a 99', 'Aprovado', C.accent],
+                  ['60 a 70', 'Aprovado com ressalva', C.warning],
+                  ['abaixo de 60', 'Reprovado', C.danger],
+                ].map(([faixa, desc, cor], i) => (
+                  <div key={i} style={{ flex: 1, minWidth: 150, padding: '8px 12px', background: 'white', borderRadius: 7, borderLeft: `3px solid ${cor}`, border: `1px solid ${C.border}` }}>
+                    <div style={{ fontSize: 13, fontWeight: 800, color: cor }}>{faixa}</div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>{desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Exemplo prático */}
+            <div style={{ marginTop: 14, padding: '12px 14px', background: '#FFFBEB', borderRadius: 8, border: '1px solid #FCD34D44' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#92400E', marginBottom: 6 }}>💡 Exemplo prático</div>
+              <div style={{ fontSize: 11, color: '#78350F', lineHeight: 1.7 }}>
+                Fornecedor com <strong>48 recebimentos</strong>: 1 com quantidade errada (2,1%) e 3 com embalagem ruim (6,3%).<br />
+                Qualidade = 100 − (0,021 × 15) − (0,063 × 10) = <strong>99,1</strong><br />
+                Se entregou <strong>8 de 10 pedidos no prazo</strong> → Prazo = 80,0<br />
+                IDF Final = (99,1 × 0,75) + (80,0 × 0,25) = <strong>94,3 → Aprovado</strong>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           {[{r:'100',l:'Perfeito',i:100},{r:'71–99',l:'Aprovado',i:85},{r:'60–70',l:'Ressalva',i:65},{r:'0–59',l:'Reprovado',i:30}].map((c,i) => {
