@@ -389,7 +389,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
         let from = 0
         while (true) {
           const { data, error } = await supabase
-            .from('idf_historico')
+            .from('vw_idf_qualidade')
             .select('fornecedor,grupo_produto,especificacao_ok,condicao_ok,quantidade_ok,nf_conforme_ok,embalagem_ok')
             .range(from, from + 999)
           if (error || !data || !data.length) break
