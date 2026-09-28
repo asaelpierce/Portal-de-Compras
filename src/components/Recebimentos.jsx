@@ -95,15 +95,15 @@ function ModalDia({ dia, recebimentos, onClose }) {
                     </div>
                     <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                       {[
-                        { label:'Qtd conforme NF', val:r.qtd_conforme_nf, ok:r.qtd_conforme_nf==='Sim' },
-                        { label:'NF conforme OC',   val:r.nf_conforme_pedido, ok:r.nf_conforme_pedido==='Sim' },
-                        { label:'Prazo',             val:r.prazo_dentro_esperado, ok:r.prazo_dentro_esperado==='Sim' },
-                        { label:'Embalagem',         val:r.embalagem_conforme, ok:r.embalagem_conforme==='Sim' },
+                        { label:'Qtd conforme NF', val:r.qtd_conforme_nf },
+                        { label:'NF conforme OC',   val:r.nf_conforme_pedido },
+                        { label:'Prazo',             val:r.prazo_dentro_esperado },
+                        { label:'Embalagem',         val:r.embalagem_conforme },
                       ].map((item, j) => (
                         <span key={j} style={{ fontSize:10, padding:'2px 8px', borderRadius:20, fontWeight:600,
-                          background: item.ok ? C.okDim : '#FEF2F2',
-                          color: item.ok ? C.okText : C.danger }}>
-                          {item.ok ? '✓' : '✗'} {item.label}
+                          background: !item.val ? '#F3F4F6' : item.val==='Sim' ? C.okDim : '#FEF2F2',
+                          color: !item.val ? C.subtle : item.val==='Sim' ? C.okText : C.danger }}>
+                          {!item.val ? '–' : item.val==='Sim' ? '✓' : '✗'} {item.label}
                         </span>
                       ))}
                     </div>
