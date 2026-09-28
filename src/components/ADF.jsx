@@ -15,10 +15,10 @@ const QUESITOS = [
 ]
 
 const ATENDIMENTO = {
-  TOTAL:        { label: 'Total',        pct: 1.0,  cor: C.success, bg: C.okDim     },
-  PARCIAL:      { label: 'Parcial',      pct: 0.5,  cor: C.warning, bg: C.warnDim   },
-  NAO:          { label: 'Não atende',   pct: 0.0,  cor: C.danger,  bg: C.dangerDim },
-  NAO_AVALIADO: { label: 'Não avaliado', pct: null, cor: C.subtle,  bg: '#F3F4F6'   },
+  TOTAL:        { label: 'TOTAL',        sub: '100%',     pct: 1.0,  cor: C.success, bg: C.okDim     },
+  PARCIAL:      { label: 'PARCIAL',      sub: '50%',      pct: 0.5,  cor: C.warning, bg: C.warnDim   },
+  NAO:          { label: 'NÃO',          sub: '0 pontos', pct: 0.0,  cor: C.danger,  bg: C.dangerDim },
+  NAO_AVALIADO: { label: 'Não Avaliado', sub: '—',        pct: null, cor: C.subtle,  bg: '#F3F4F6'   },
 }
 
 const CLASSIF = {
@@ -92,7 +92,7 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
               {avaliacao ? '✏️ Editar avaliação' : '📋 Nova avaliação ADF'}
             </div>
             <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>
-              KdB 114/02 — Análise de Desempenho de Fornecedor
+              KdB 114/02 — ADF · Revisão 02
             </div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, cursor:'pointer', color:C.muted, lineHeight:1 }}>×</button>
@@ -101,7 +101,7 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
         {/* Dados básicos */}
         <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:12, marginBottom:18 }}>
           <div>
-            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Fornecedor *</label>
+            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>FORNECEDOR *</label>
             <input list="forn-list" value={form.fornecedor} onChange={e => set('fornecedor', e.target.value)}
               placeholder="Nome do fornecedor" style={{ ...inp, marginTop:5 }} />
             <datalist id="forn-list">
@@ -109,7 +109,7 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
             </datalist>
           </div>
           <div>
-            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Período</label>
+            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>PERÍODO</label>
             <select value={form.periodo} onChange={e => set('periodo', e.target.value)} style={{ ...inp, marginTop:5 }}>
               {[2025, 2026, 2027].flatMap(ano => [1, 2].map(s => (
                 <option key={`${ano}-S${s}`} value={`${ano}-S${s}`}>{ano} — {s}º semestre</option>
@@ -119,14 +119,14 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
         </div>
 
         <div style={{ marginBottom:20 }}>
-          <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Produto / Serviço</label>
+          <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>PRODUTO / SERVIÇO</label>
           <input value={form.produto_servico} onChange={e => set('produto_servico', e.target.value)}
             placeholder="Ex: Chapas de aço, Jateamento, Flanges..." style={{ ...inp, marginTop:5 }} />
         </div>
 
         {/* Quesitos */}
         <div style={{ marginBottom:20 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:C.brand, marginBottom:10 }}>QUESITOS DE AVALIAÇÃO</div>
+          <div style={{ fontSize:12, fontWeight:700, color:C.brand, marginBottom:10 }}>QUESITO DE AVALIAÇÃO · PONTOS · ATENDIMENTO</div>
           {QUESITOS.map(q => (
             <div key={q.id} style={{ marginBottom:14, padding:'14px 16px', background:'#F9FAFB', borderRadius:10, border:`1px solid ${C.border}` }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
@@ -149,7 +149,7 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
                     transition:'all 0.15s',
                   }}>
                     {cfg.label}
-                    {cfg.pct !== null && <div style={{ fontSize:9, marginTop:1 }}>{(cfg.pct*100).toFixed(0)}%</div>}
+                    <div style={{ fontSize:9, marginTop:1, opacity:0.75 }}>{cfg.sub}</div>
                   </button>
                 ))}
               </div>
@@ -165,19 +165,19 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
         <div style={{ padding:'16px 18px', borderRadius:10, background: cfgCls.bg, border:`1px solid ${cfgCls.cor}44`, marginBottom:18 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <div>
-              <div style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Pontuação final</div>
+              <div style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>PONTUAÇÃO FINAL</div>
               <div style={{ fontSize:30, fontWeight:800, color:cfgCls.cor, marginTop:2 }}>
                 {resultado.pontuacao !== null ? resultado.pontuacao : '—'}
                 {resultado.pontuacao !== null && <span style={{ fontSize:16, fontWeight:500 }}> / 100</span>}
               </div>
             </div>
             <div style={{ textAlign:'right' }}>
-              <div style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Classificação</div>
+              <div style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>CLASSIFICAÇÃO</div>
               <div style={{ fontSize:16, fontWeight:700, color:cfgCls.cor, marginTop:4 }}>{cfgCls.label}</div>
             </div>
           </div>
           <div style={{ marginTop:12, paddingTop:12, borderTop:`1px solid ${cfgCls.cor}22`, fontSize:11, color:C.text, lineHeight:1.6 }}>
-            <strong style={{ color:cfgCls.cor }}>Providência sugerida: </strong>
+            <strong style={{ color:cfgCls.cor }}>PROVIDÊNCIA SUGERIDA: </strong>
             {PROVIDENCIAS[resultado.classificacao]}
           </div>
         </div>
@@ -185,12 +185,12 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
         {/* Responsável e obs */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:12, marginBottom:20 }}>
           <div>
-            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Responsável</label>
+            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>RESP. PELAS INFORMAÇÕES</label>
             <input value={form.responsavel} onChange={e => set('responsavel', e.target.value)}
               placeholder="Seu nome" style={{ ...inp, marginTop:5 }} />
           </div>
           <div>
-            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>Observações gerais</label>
+            <label style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>OBSERVAÇÕES</label>
             <input value={form.observacoes_gerais} onChange={e => set('observacoes_gerais', e.target.value)}
               placeholder="Comentários adicionais" style={{ ...inp, marginTop:5 }} />
           </div>
@@ -290,9 +290,9 @@ export default function ADF() {
       {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:12 }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:700, color:C.brand }}>📋 ADF — Análise de Desempenho de Fornecedor</div>
+          <div style={{ fontSize:15, fontWeight:700, color:C.brand }}>📋 KdB 114/02 — ADF — Análise de Desempenho de Fornecedores</div>
           <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>
-            KdB 114/02 · Avaliação semestral qualitativa · Complementa o IDF operacional
+            Revisão: 02 · Avaliação semestral qualitativa · Complementa o IDF operacional
           </div>
           <button onClick={() => setMostraMetodo(m => !m)} style={{
             marginTop:8, padding:'5px 12px', borderRadius:7,
@@ -313,7 +313,7 @@ export default function ADF() {
       {/* Metodologia */}
       {mostraMetodo && (
         <div style={{ padding:'16px 18px', background:'#F8FAFF', border:`1px solid ${C.accent}33`, borderRadius:10 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:C.brand, marginBottom:12 }}>QUESITOS E PONTUAÇÃO</div>
+          <div style={{ fontSize:12, fontWeight:700, color:C.brand, marginBottom:12 }}>QUESITO DE AVALIAÇÃO E PONTOS</div>
           <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:16 }}>
             {QUESITOS.map(q => (
               <div key={q.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'white', borderRadius:8, border:`1px solid ${C.border}` }}>
@@ -328,12 +328,12 @@ export default function ADF() {
             ))}
           </div>
 
-          <div style={{ fontSize:12, fontWeight:700, color:C.brand, marginBottom:8 }}>NÍVEIS DE ATENDIMENTO</div>
+          <div style={{ fontSize:12, fontWeight:700, color:C.brand, marginBottom:8 }}>ATENDIMENTO</div>
           <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
             {Object.entries(ATENDIMENTO).filter(([k]) => k !== 'NAO_AVALIADO').map(([k, cfg]) => (
               <div key={k} style={{ flex:1, minWidth:130, padding:'10px 14px', background:cfg.bg, borderRadius:8, borderLeft:`3px solid ${cfg.cor}` }}>
                 <div style={{ fontSize:13, fontWeight:700, color:cfg.cor }}>{cfg.label}</div>
-                <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>Vale {(cfg.pct*100).toFixed(0)}% dos pontos</div>
+                <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{cfg.sub} dos pontos</div>
               </div>
             ))}
           </div>
@@ -406,36 +406,36 @@ export default function ADF() {
         ) : (
           <DataTable
             columns={[
-              { label:'Fornecedor', render:r => (
+              { label:'FORNECEDOR', render:r => (
                 <div>
                   <div style={{ fontWeight:600, color:C.brand }}>{r.fornecedor}</div>
                   {r.produto_servico && <div style={{ fontSize:10, color:C.muted }}>{r.produto_servico}</div>}
                 </div>
               )},
-              { label:'Período', render:r => <span style={{ fontSize:11, color:C.muted }}>{r.periodo}</span> },
-              { label:'Parecer (40)', render:r => {
+              { label:'PERÍODO', render:r => <span style={{ fontSize:11, color:C.muted }}>{r.periodo}</span> },
+              { label:'Parecer técnico (40)', render:r => {
                 const cfg = ATENDIMENTO[r.parecer_tecnico] || ATENDIMENTO.NAO_AVALIADO
                 return <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:cfg.bg, color:cfg.cor, fontWeight:600 }}>{cfg.label}</span>
               }},
-              { label:'Devoluções (30)', render:r => {
+              { label:'Result. indesejáveis (30)', render:r => {
                 const cfg = ATENDIMENTO[r.resultados_indesejaveis] || ATENDIMENTO.NAO_AVALIADO
                 return <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:cfg.bg, color:cfg.cor, fontWeight:600 }}>{cfg.label}</span>
               }},
-              { label:'Prazo (30)', render:r => {
+              { label:'Cumprim. prazo (30)', render:r => {
                 const cfg = ATENDIMENTO[r.cumprimento_prazo] || ATENDIMENTO.NAO_AVALIADO
                 return <span style={{ fontSize:10, padding:'2px 8px', borderRadius:20, background:cfg.bg, color:cfg.cor, fontWeight:600 }}>{cfg.label}</span>
               }},
-              { label:'Pontuação', render:r => {
+              { label:'PONTUAÇÃO FINAL', render:r => {
                 const cfg = CLASSIF[r.classificacao] || CLASSIF.NAO_AVALIADO
                 return <span style={{ display:'inline-block', padding:'4px 12px', borderRadius:20, fontSize:14, fontWeight:800, background:cfg.bg, color:cfg.cor }}>
                   {r.pontuacao_final != null ? r.pontuacao_final : '—'}
                 </span>
               }},
-              { label:'Classificação', render:r => {
+              { label:'CLASSIFICAÇÃO', render:r => {
                 const cfg = CLASSIF[r.classificacao] || CLASSIF.NAO_AVALIADO
                 return <span style={{ fontSize:11, fontWeight:600, color:cfg.cor }}>{cfg.label}</span>
               }},
-              { label:'Data', render:r => <span style={{ fontSize:11, color:C.muted }}>{fmtDate(r.data_avaliacao)}</span> },
+              { label:'DATA DA AVALIAÇÃO', render:r => <span style={{ fontSize:11, color:C.muted }}>{fmtDate(r.data_avaliacao)}</span> },
               { label:'', render:r => (
                 <div style={{ display:'flex', gap:5 }}>
                   <button onClick={() => setModal(r)} style={{ padding:'4px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.muted, fontSize:11, cursor:'pointer' }}>✏️</button>
