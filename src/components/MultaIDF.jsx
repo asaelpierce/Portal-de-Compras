@@ -349,10 +349,10 @@ function calcIDF(prog, prazo, qtdProg, qtdPrazo) {
 }
 
 function conceito(idf) {
-  if (idf >= 95) return { label: 'Ótimo',        color: C.okText,     bg: C.okDim,     border: C.success }
-  if (idf >= 85) return { label: 'Bom',           color: C.accentText, bg: C.accentDim, border: C.accent  }
-  if (idf >= 60) return { label: 'Regular',       color: C.warnText,   bg: C.warnDim,   border: C.warning }
-  return              { label: 'Insuficiente',   color: C.dangerText, bg: C.dangerDim, border: C.danger  }
+  if (idf >= 100) return { label: 'Perfeito',   color: C.okText,     bg: C.okDim,     border: C.success }
+  if (idf >= 71)  return { label: 'Aprovado',   color: C.accentText, bg: C.accentDim, border: C.accent  }
+  if (idf >= 60)  return { label: 'Ressalva',   color: C.warnText,   bg: C.warnDim,   border: C.warning }
+  return               { label: 'Reprovado',  color: C.dangerText, bg: C.dangerDim, border: C.danger  }
 }
 
 export function AvaliacaoIDF({ pedidos, nfs }) {
@@ -527,7 +527,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
   }, [encerrados, historico, nfsPorPedido, loading, filtroGrupo, filtroStatus, search])
 
   const media = idfData.length ? (idfData.reduce((s, f) => s + f.idf, 0) / idfData.length).toFixed(1) : '—'
-  const dist = ['Ótimo','Bom','Regular','Insuficiente'].map(l => ({ label: l, count: idfData.filter(f => f.conceito.label === l).length, ...conceito({Ótimo:97,Bom:89,Regular:72,Insuficiente:30}[l]) }))
+  const dist = ['Perfeito','Aprovado','Ressalva','Reprovado'].map(l => ({ label: l, count: idfData.filter(f => f.conceito.label === l).length, ...conceito({Perfeito:100,Aprovado:85,Ressalva:65,Reprovado:30}[l]) }))
 
 
   return (
@@ -677,7 +677,7 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
         )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
-          {[{r:'100',l:'Perfeito',i:100},{r:'71–99',l:'Aprovado',i:85},{r:'60–70',l:'Ressalva',i:65},{r:'0–59',l:'Reprovado',i:30}].map((c,i) => {
+          {[{r:'100',l:'Perfeito — sem desvios',i:100},{r:'71 a 99',l:'Aprovado',i:85},{r:'60 a 70',l:'Aprovado c/ ressalva',i:65},{r:'abaixo de 60',l:'Reprovado',i:30}].map((c,i) => {
             const cfg = conceito(c.i)
             return <span key={i} style={{padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:500,background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`}}><strong>{c.r}</strong> — {c.l}</span>
           })}
@@ -685,22 +685,28 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
 
         <DataTable
           columns={[
-            { label: 'Fornecedor', render: r => <div><div style={{fontWeight:600,color:C.brand}}>{r.nome}</div>{r.tem_sankhya&&<div style={{fontSize:9,color:C.success}}>✓ Prazo via Sankhya</div>}</div> },
-            { label: 'Pedidos (SKY)', render: r => <span style={{color:C.muted}}>{r.total_pedidos||'—'}</span> },
-            { label: 'Atrasados (SKY)', render: r => <span style={{color:r.atrasados_sk>0?C.danger:C.okText,fontWeight:700}}>{r.tem_sankhya?r.atrasados_sk:'—'}</span> },
-            { label: 'Prazo %', render: r => r.pct_prazo!==null
+            { label: 'FORNECEDOR', render: r => <div><div style={{fontWeight:600,color:C.brand}}>{r.nome}</div>{r.tem_sankhya&&<div style={{fontSize:9,color:C.success}}>✓ Prazo via Sankhya</div>}</div> },
+            { label: 'PEDIDOS\nAVALIADOS', render: r => <span style={{color:C.muted}}>{r.total_pedidos||'—'}</span> },
+            { label: 'FORA DO\nPRAZO', render: r => <span style={{color:r.atrasados_sk>0?C.danger:C.okText,fontWeight:700}}>{r.tem_sankhya?r.atrasados_sk:'—'}</span> },
+            { label: 'PRAZO DE ENTREGA\n(25%)', render: r => r.pct_prazo!==null
               ? <div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:r.pct_prazo>=80?C.success:r.pct_prazo>=60?C.warning:C.danger,width:`${r.pct_prazo}%`}}/></div><span style={{fontSize:11,fontWeight:600,minWidth:38,color:r.pct_prazo>=80?C.okText:r.pct_prazo>=60?C.warning:C.danger}}>{r.pct_prazo}%</span></div>
               : <span style={{color:C.subtle}}>—</span>
             },
-            { label: 'Receb. (Forms)', render: r => <span style={{color:C.muted}}>{r.total_forms||'—'}</span> },
-            { label: 'Qtd errada', render: r => <span style={{color:r.qtd_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.qtd_nok:'—'}</span> },
-            { label: 'Embalagem', render: r => <span style={{color:r.emb_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.emb_nok:'—'}</span> },
-            { label: 'IDF Prazo', render: r => r.idf_prazo!==null
+            { label: 'RECEBIMENTOS\nAVALIADOS', render: r => <span style={{color:C.muted}}>{r.total_forms||'—'}</span> },
+            { label: 'ESPECIFICAÇÃO\n(35%)', render: r => <span style={{color:r.esp_nok>0?C.danger:C.okText,fontWeight:600}}>{r.total_forms?r.esp_nok:'—'}</span> },
+            { label: 'CONF. QUANTITATIVA\n(15%)', render: r => <span style={{color:r.qtd_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.qtd_nok:'—'}</span> },
+            { label: 'NOTA FISCAL\n(10%)', render: r => <span style={{color:r.nf_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.nf_nok:'—'}</span> },
+            { label: 'EMBALAGEM\n(10%)', render: r => <span style={{color:r.emb_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.emb_nok:'—'}</span> },
+            { label: 'ÍNDICE QUALIDADE', render: r => r.idf_qual!==null
+              ? <span style={{fontSize:12,fontWeight:700,color:r.idf_qual>=90?C.okText:r.idf_qual>=71?C.accent:C.danger}}>{r.idf_qual}</span>
+              : <span style={{color:C.subtle}}>—</span>
+            },
+            { label: 'ÍNDICE PRAZO', render: r => r.idf_prazo!==null
               ? <span style={{fontSize:12,fontWeight:700,color:r.idf_prazo>=80?C.success:r.idf_prazo>=60?C.warning:C.danger}}>{r.idf_prazo}</span>
               : <span style={{color:C.subtle}}>—</span>
             },
-            { label: 'IDF Final', render: r => <span style={{display:'inline-block',padding:'4px 12px',borderRadius:20,fontSize:13,fontWeight:800,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span> },
-            { label: 'Status', render: r => <span style={{display:'inline-block',padding:'3px 8px',borderRadius:20,fontSize:11,fontWeight:600,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span> },
+            { label: 'IDF FINAL', render: r => <span style={{display:'inline-block',padding:'4px 12px',borderRadius:20,fontSize:13,fontWeight:800,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span> },
+            { label: 'CLASSIFICAÇÃO', render: r => <span style={{display:'inline-block',padding:'3px 8px',borderRadius:20,fontSize:11,fontWeight:600,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span> },
           ]}
           rows={idfData}
           emptyMsg={loading ? 'Carregando dados...' : 'Nenhum fornecedor encontrado'}
