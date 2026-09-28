@@ -29,20 +29,21 @@ const CLASSIF = {
 }
 
 const PROVIDENCIAS = {
-  APROVADO:          'Manter fornecedor. Continuar monitoramento periódico.',
-  APROVADO_RESSALVA: 'Comunicar pontos de melhoria ao fornecedor e reavaliar no próximo período.',
-  REPROVADO:         'Emitir notificação formal. Avaliar substituição ou plano de ação com prazo definido.',
-  NAO_AVALIADO:      'Aguardando informações para completar a avaliação.',
+  APROVADO:          'OK - Permanece no Cadastro',
+  APROVADO_RESSALVA: 'Permanece no Cadastro com ressalva - comunicar pontos de melhoria e reavaliar no próximo período',
+  REPROVADO:         'Emitir notificação formal - avaliar substituição ou plano de ação com prazo definido',
+  NAO_AVALIADO:      'Não Avaliado',
 }
 
 function calcularADF(av) {
   const vals = QUESITOS.map(q => ATENDIMENTO[av[q.id]]?.pct)
+  const parciais = QUESITOS.map((q, i) => vals[i] == null ? null : parseFloat((q.pontos * vals[i]).toFixed(1)))
   if (vals.some(v => v === null || v === undefined)) {
-    return { pontuacao: null, classificacao: 'NAO_AVALIADO' }
+    return { pontuacao: null, classificacao: 'NAO_AVALIADO', parciais }
   }
   const pontos = QUESITOS.reduce((s, q, i) => s + q.pontos * vals[i], 0)
   const cls = pontos >= 71 ? 'APROVADO' : pontos >= 60 ? 'APROVADO_RESSALVA' : 'REPROVADO'
-  return { pontuacao: parseFloat(pontos.toFixed(1)), classificacao: cls }
+  return { pontuacao: parseFloat(pontos.toFixed(1)), classificacao: cls, parciais }
 }
 
 // ── Modal de avaliação ───────────────────────────────────────────────────────
@@ -134,9 +135,17 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
                   <div style={{ fontSize:13, fontWeight:600, color:C.brand }}>{q.label}</div>
                   <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{q.desc}</div>
                 </div>
-                <span style={{ padding:'3px 10px', borderRadius:20, background:C.accentDim, color:C.accentText, fontSize:12, fontWeight:800, whiteSpace:'nowrap', marginLeft:10 }}>
-                  {q.pontos} pts
-                </span>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginLeft:10 }}>
+                  <span style={{ padding:'3px 10px', borderRadius:20, background:C.accentDim, color:C.accentText, fontSize:12, fontWeight:800, whiteSpace:'nowrap' }}>
+                    {q.pontos} pts
+                  </span>
+                  {resultado.parciais[QUESITOS.indexOf(q)] != null && (
+                    <span style={{ padding:'3px 10px', borderRadius:20, background:C.okDim, color:C.okText, fontSize:12, fontWeight:800, whiteSpace:'nowrap' }}
+                      title="Pontuação parcial deste quesito">
+                      = {resultado.parciais[QUESITOS.indexOf(q)]}
+                    </span>
+                  )}
+                </div>
               </div>
               <div style={{ display:'flex', gap:6, marginTop:10 }}>
                 {Object.entries(ATENDIMENTO).map(([k, cfg]) => (
@@ -166,9 +175,20 @@ function ModalADF({ avaliacao, fornecedores, onClose, onSalvar }) {
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <div>
               <div style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'0.04em' }}>PONTUAÇÃO FINAL</div>
-              <div style={{ fontSize:30, fontWeight:800, color:cfgCls.cor, marginTop:2 }}>
-                {resultado.pontuacao !== null ? resultado.pontuacao : '—'}
-                {resultado.pontuacao !== null && <span style={{ fontSize:16, fontWeight:500 }}> / 100</span>}
+              <div style={{ display:'flex', alignItems:'flex-end', gap:14, marginTop:4 }}>
+                <div>
+                  <div style={{ fontSize:9, color:C.muted, fontWeight:600 }}>PARCIAL</div>
+                  <div style={{ fontSize:13, fontWeight:600, color:C.text, fontFamily:'monospace' }}>
+                    {resultado.parciais.map(p => p ?? '—').join(' + ')}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize:9, color:C.muted, fontWeight:600 }}>TOTAL</div>
+                  <div style={{ fontSize:30, fontWeight:800, color:cfgCls.cor, lineHeight:1 }}>
+                    {resultado.pontuacao !== null ? resultado.pontuacao : '—'}
+                    {resultado.pontuacao !== null && <span style={{ fontSize:15, fontWeight:500 }}> / 100</span>}
+                  </div>
+                </div>
               </div>
             </div>
             <div style={{ textAlign:'right' }}>
