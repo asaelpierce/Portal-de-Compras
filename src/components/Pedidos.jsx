@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Card, CardTitle, SearchInput, Select, Badge, Ellipsis, Pill, ModalMulta } from './UI'
 import { C, STATUS_EMBARQUE, STATUS_ENTREGA } from '../lib/tokens'
 import { fmtDate, fmtCurrency, fmtInt, diasDiferenca, statusEmbarque, statusEntrega } from '../lib/utils'
@@ -292,68 +292,129 @@ function CalendarioEmbarques({ pedidos, onConfirmarEmbarque }) {
 }
 
 // ── RANKING ATRASOS ──────────────────────────────────────────────────────────
-function RankingAtrasos({ pedidos }) {
+// Conta PEDIDOS únicos (não itens) e usa o acumulado de 2026, independente do
+// filtro de data da tela. Importação fica fora — tem lead time próprio.
+function RankingAtrasos() {
+  const [dados, setDados]   = useState([])
+  const [loading, setLoad]  = useState(true)
+  const [mes, setMes]       = useState('')   // '' = acumulado 2026
+
+  useEffect(() => {
+    supabase
+      .from('vw_atrasos_pedido')
+      .select('numero_pedido,fornecedor,comprador,dias_atraso,situacao,mes_pedido')
+      .then(({ data }) => { setDados(data || []); setLoad(false) })
+  }, [])
+
+  const meses = useMemo(() => {
+    const s = [...new Set(dados.map(d => d.mes_pedido).filter(Boolean))].sort().reverse()
+    return s
+  }, [dados])
+
+  const filtrados = useMemo(
+    () => mes ? dados.filter(d => d.mes_pedido === mes) : dados,
+    [dados, mes]
+  )
+
   const ranking = useMemo(() => {
     const map = {}
-    pedidos.forEach(p => {
-      if (statusEntrega(p.data_prevista_entrega, p.quantidade_pendente) !== 'ATRASADO') return
-      const f = p.fornecedor || '—'
-      if (!map[f]) map[f] = { fornecedor: f, itens: 0, diasTotal: 0, maior: 0 }
-      map[f].itens++
-      const d = Math.abs(diasDiferenca(p.data_prevista_entrega) || 0)
-      map[f].diasTotal += d
-      if (d > map[f].maior) map[f].maior = d
+    filtrados.forEach(d => {
+      const f = d.fornecedor || '—'
+      if (!map[f]) map[f] = { fornecedor: f, pedidos: 0, pendentes: 0, diasTotal: 0, maior: 0 }
+      map[f].pedidos++
+      if (d.situacao === 'PENDENTE') map[f].pendentes++
+      const dias = Number(d.dias_atraso) || 0
+      map[f].diasTotal += dias
+      if (dias > map[f].maior) map[f].maior = dias
     })
-    return Object.values(map).sort((a, b) => b.itens - a.itens).slice(0, 8)
-  }, [pedidos])
+    return Object.values(map).sort((a, b) => b.pedidos - a.pedidos).slice(0, 10)
+  }, [filtrados])
 
-  const max = Math.max(...ranking.map(r => r.itens), 1)
+  const max = Math.max(...ranking.map(r => r.pedidos), 1)
+  const totalPedidos = filtrados.length
+  const totalPend    = filtrados.filter(d => d.situacao === 'PENDENTE').length
+
+  const rotuloMes = m => {
+    const [a, b] = m.split('-')
+    const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+    return `${nomes[parseInt(b, 10) - 1]}/${a}`
+  }
+
+  const selStyle = {
+    padding: '6px 11px', borderRadius: 8, border: `1px solid ${C.border}`,
+    background: C.bg, fontSize: 12, color: C.text, outline: 'none', cursor: 'pointer',
+  }
+
+  if (loading) return <Card><div style={{ textAlign: 'center', padding: 40, color: C.muted }}>Carregando atrasos…</div></Card>
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>
-      <Card>
-        <CardTitle>Quem mais atrasou — entregas fora do prazo</CardTitle>
-        {ranking.length === 0
-          ? <div style={{ textAlign: 'center', padding: 40, color: C.subtle }}><div style={{ fontSize: 36 }}>🎉</div><div>Sem atrasos</div></div>
-          : <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {ranking.map((r, i) => (
-              <div key={i}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: C.brand }}>{i+1}. {r.fornecedor}</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: C.danger }}>{r.itens} itens</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ flex: 1, height: 24, background: '#FEE2E2', borderRadius: 5, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: `linear-gradient(90deg, #DC2626, #FF6B6B)`, width: `${Math.round(r.itens/max*100)}%`, borderRadius: 5, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: 'white' }}>{r.itens} {r.itens===1?'item':'itens'}</span>
-                    </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+      {/* Barra de contexto */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, padding: '10px 14px', background: C.accentDim, border: `1px solid ${C.accent}33`, borderRadius: 9 }}>
+        <div style={{ fontSize: 12, color: C.brand }}>
+          <strong>{totalPedidos}</strong> pedidos atrasados
+          {totalPend > 0 && <> · <strong style={{ color: C.danger }}>{totalPend}</strong> ainda pendentes</>}
+          <span style={{ color: C.muted }}> · somente nacionais · {mes ? rotuloMes(mes) : 'acumulado 2026'}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, color: C.muted }}>Período:</span>
+          <select value={mes} onChange={e => setMes(e.target.value)} style={selStyle}>
+            <option value="">Acumulado 2026</option>
+            {meses.map(m => <option key={m} value={m}>{rotuloMes(m)}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: 14 }}>
+        <Card>
+          <CardTitle>Quem mais atrasou — por pedido</CardTitle>
+          {ranking.length === 0
+            ? <div style={{ textAlign: 'center', padding: 40, color: C.subtle }}><div style={{ fontSize: 36 }}>🎉</div><div>Sem atrasos no período</div></div>
+            : <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {ranking.map((r, i) => (
+                <div key={i}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.brand }}>{i+1}. {r.fornecedor}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.danger }}>{r.pedidos} {r.pedidos===1?'pedido':'pedidos'}</span>
                   </div>
-                  <span style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>maior: <strong style={{ color: C.danger }}>{r.maior}d</strong> · média: <strong>{Math.round(r.diasTotal/r.itens)}d</strong></span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, height: 24, background: '#FEE2E2', borderRadius: 5, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: 'linear-gradient(90deg, #DC2626, #FF6B6B)', width: `${Math.round(r.pedidos/max*100)}%`, borderRadius: 5, display: 'flex', alignItems: 'center', paddingLeft: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: 'white' }}>{r.pedidos}</span>
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 11, color: C.muted, flexShrink: 0 }}>
+                      maior: <strong style={{ color: C.danger }}>{r.maior}d</strong> · média: <strong>{Math.round(r.diasTotal/r.pedidos)}d</strong>
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        }
-      </Card>
-      <Card>
-        <CardTitle>Detalhamento</CardTitle>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead><tr style={{ background: '#F9FAFB' }}>{['Fornecedor','Itens','Maior atraso','Média'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: C.muted, fontWeight: 600, fontSize: 10, textTransform: 'uppercase', borderBottom: `2px solid ${C.border}` }}>{h}</th>)}</tr></thead>
-          <tbody>
-            {ranking.length === 0
-              ? <tr><td colSpan={4} style={{ padding: 24, textAlign: 'center', color: C.subtle }}>Sem atrasos</td></tr>
-              : ranking.map((r, i) => (
-                <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i%2?'#FAFAFA':C.surface }}>
-                  <td style={{ padding: '8px 10px', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.fornecedor}>{r.fornecedor}</td>
-                  <td style={{ padding: '8px 10px' }}><span style={{ background: C.dangerDim, color: C.dangerText, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{r.itens}</span></td>
-                  <td style={{ padding: '8px 10px', color: C.danger, fontWeight: 700 }}>{r.maior}d</td>
-                  <td style={{ padding: '8px 10px', color: C.muted }}>{Math.round(r.diasTotal/r.itens)}d</td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
-      </Card>
+              ))}
+            </div>
+          }
+        </Card>
+
+        <Card>
+          <CardTitle>Detalhamento</CardTitle>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead><tr style={{ background: '#F9FAFB' }}>{['Fornecedor','Pedidos','Pendentes','Maior','Média'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: C.muted, fontWeight: 600, fontSize: 10, textTransform: 'uppercase', borderBottom: `2px solid ${C.border}` }}>{h}</th>)}</tr></thead>
+            <tbody>
+              {ranking.length === 0
+                ? <tr><td colSpan={5} style={{ padding: 24, textAlign: 'center', color: C.subtle }}>Sem atrasos</td></tr>
+                : ranking.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i%2?'#FAFAFA':C.surface }}>
+                    <td style={{ padding: '8px 10px', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.fornecedor}>{r.fornecedor}</td>
+                    <td style={{ padding: '8px 10px' }}><span style={{ background: C.dangerDim, color: C.dangerText, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>{r.pedidos}</span></td>
+                    <td style={{ padding: '8px 10px', color: r.pendentes > 0 ? C.danger : C.subtle, fontWeight: r.pendentes > 0 ? 700 : 400 }}>{r.pendentes || '—'}</td>
+                    <td style={{ padding: '8px 10px', color: C.danger, fontWeight: 700 }}>{r.maior}d</td>
+                    <td style={{ padding: '8px 10px', color: C.muted }}>{Math.round(r.diasTotal/r.pedidos)}d</td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </Card>
+      </div>
     </div>
   )
 }
@@ -455,7 +516,7 @@ export default function Pedidos({ pedidos, onReload, isImportacao = false }) {
       </div>
 
       {abaAtiva === 'calendario' && <CalendarioEmbarques pedidos={pedidos} onConfirmarEmbarque={setConfirmando} />}
-      {abaAtiva === 'atrasos'   && <RankingAtrasos pedidos={pedidos} />}
+      {abaAtiva === 'atrasos'   && <RankingAtrasos />}
 
       {abaAtiva === 'lista' && (
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
