@@ -355,6 +355,12 @@ function conceito(idf) {
   return               { label: 'Reprovado',  color: C.dangerText, bg: C.dangerDim, border: C.danger  }
 }
 
+// Fornecedor com poucas ocorrências no período não recebe julgamento de
+// desempenho — uma única entrega atrasada não caracteriza um padrão.
+const CONCEITO_SEM_AMOSTRA = {
+  label: 'Amostra insuficiente', color: C.subtle, bg: '#F3F4F6', border: C.border,
+}
+
 export function AvaliacaoIDF({ pedidos, nfs }) {
   const [encerrados, setEncerrados] = useState([])
   const [historico, setHistorico]   = useState([])
@@ -365,43 +371,28 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
   const [mostraMetodo, setMostraMetodo]     = useState(false)
 
   useEffect(() => {
+    const pagina = async (tabela, colunas, filtro) => {
+      let all = [], from = 0
+      while (true) {
+        let q = supabase.from(tabela).select(colunas).range(from, from + 999)
+        if (filtro) q = filtro(q)
+        const { data, error } = await q
+        if (error || !data || !data.length) break
+        all = [...all, ...data]
+        if (data.length < 1000) break
+        from += 1000
+      }
+      return all
+    }
     Promise.all([
-      // Pedidos encerrados com data de entrega
-      (async () => {
-        let all = []
-        let from = 0
-        while (true) {
-          const { data, error } = await supabase
-            .from('pedidos_encerrados')
-            .select('numero_pedido,fornecedor,data_prevista_entrega,data_encerramento,prazo_sankhya')
-            .not('data_prevista_entrega', 'is', null)
-            .range(from, from + 999)
-          if (error || !data || !data.length) break
-          all = [...all, ...data]
-          if (data.length < 1000) break
-          from += 1000
-        }
-        return all
-      })(),
-      // Histórico Forms (qualidade)
-      (async () => {
-        let all = []
-        let from = 0
-        while (true) {
-          const { data, error } = await supabase
-            .from('vw_idf_qualidade')
-            .select('fornecedor,grupo_produto,especificacao_ok,condicao_ok,quantidade_ok,nf_conforme_ok,embalagem_ok')
-            .range(from, from + 999)
-          if (error || !data || !data.length) break
-          all = [...all, ...data]
-          if (data.length < 1000) break
-          from += 1000
-        }
-        return all
-      })(),
-    ]).then(([enc, hist]) => {
+      pagina('pedidos_encerrados',
+        'numero_pedido,cod_fornecedor,fornecedor,prazo_sankhya,tipo_pedido',
+        q => q.not('prazo_sankhya', 'is', null)),
+      pagina('vw_idf_qualidade',
+        'cod_fornecedor,fornecedor,grupo_produto,especificacao_ok,condicao_ok,quantidade_ok,nf_conforme_ok,embalagem_ok'),
+    ]).then(([enc, qual]) => {
       setEncerrados(enc)
-      setHistorico(hist)
+      setHistorico(qual)
       setLoading(false)
     })
   }, [])
@@ -410,50 +401,31 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
     [...new Set(historico.map(h => h.grupo_produto).filter(Boolean))].sort()
   , [historico])
 
-  // Índice NFs por pedido (primeira entrega)
-  const nfsPorPedido = useMemo(() => {
-    const map = {}
-    nfs.forEach(n => {
-      if (!n.numero_pedido_oc || !n.data_recebimento) return
-      const k = String(n.numero_pedido_oc)
-      if (!map[k] || n.data_recebimento < map[k]) map[k] = n.data_recebimento
-    })
-    return map
-  }, [nfs])
+  // Amostra mínima para emitir uma classificação de desempenho.
+  const MIN_AMOSTRA = 3
 
   const idfData = useMemo(() => {
     if (loading) return []
 
-    // 1. Prazo via Sankhya — por pedido ÚNICO usando cod_fornecedor como chave
-    const prazoPorForn = {}  // key = cod_fornecedor
-    const pedidosVistos = new Set()
+    // 1. PRAZO — por pedido único, usando o cálculo do próprio Sankhya
+    const prazoPorForn = {}
+    const vistos = new Set()
     encerrados.forEach(e => {
       if (!e.prazo_sankhya || e.prazo_sankhya === 'SEM DATA') return
-      if (pedidosVistos.has(e.numero_pedido)) return
-      pedidosVistos.add(e.numero_pedido)
-      const key = String(e.cod_fornecedor || e.fornecedor)
+      if (vistos.has(e.numero_pedido)) return
+      vistos.add(e.numero_pedido)
+      const key = String(e.cod_fornecedor ?? e.fornecedor)
       if (!prazoPorForn[key]) prazoPorForn[key] = { nome: e.fornecedor, cod: e.cod_fornecedor, total: 0, atrasados: 0 }
       prazoPorForn[key].total += 1
       if (e.prazo_sankhya === 'FORA DO PRAZO') prazoPorForn[key].atrasados += 1
     })
 
-    // 2. Qualidade via Forms — por recebimento (Forms usa nome abreviado)
-    // Só mostra fornecedores que têm dados de prazo do Sankhya
-    const filtrado = filtroGrupo
-      ? historico.filter(h => h.grupo_produto === filtroGrupo)
-      : historico
-
-    // Agrupa qualidade pelo nome do Sankhya buscando match parcial
-    const qualPorForn = {}  // key = cod_fornecedor do Sankhya
+    // 2. QUALIDADE — agrupada pelo mesmo código de fornecedor
+    const filtrado = filtroGrupo ? historico.filter(h => h.grupo_produto === filtroGrupo) : historico
+    const qualPorForn = {}
     filtrado.forEach(h => {
-      const nomeFormsTrim = (h.fornecedor || '').trim().toUpperCase()
-      // Tenta encontrar o fornecedor no Sankhya por match parcial do nome
-      const matchKey = Object.keys(prazoPorForn).find(k => {
-        const nomeSK = (prazoPorForn[k].nome || '').toUpperCase()
-        return nomeSK.includes(nomeFormsTrim) || nomeFormsTrim.includes(nomeSK.split(' ')[0])
-      })
-      const key = matchKey || ('FORMS_' + nomeFormsTrim)
-      if (!qualPorForn[key]) qualPorForn[key] = { nome_forms: h.fornecedor, total: 0, esp_nok: 0, cond_nok: 0, qtd_nok: 0, nf_nok: 0, emb_nok: 0 }
+      const key = String(h.cod_fornecedor ?? h.fornecedor)
+      if (!qualPorForn[key]) qualPorForn[key] = { nome: h.fornecedor, total: 0, esp_nok: 0, cond_nok: 0, qtd_nok: 0, nf_nok: 0, emb_nok: 0 }
       qualPorForn[key].total += 1
       if (h.especificacao_ok === false) qualPorForn[key].esp_nok++
       if (h.condicao_ok      === false) qualPorForn[key].cond_nok++
@@ -462,41 +434,46 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
       if (h.embalagem_ok     === false) qualPorForn[key].emb_nok++
     })
 
-    // 3. Combina — base são os fornecedores do Sankhya (prazo real)
-    // Forms complementa com dados de qualidade onde houver match
-    const todos = new Set([...Object.keys(prazoPorForn), ...Object.keys(qualPorForn)])
+    // 3. Combina as duas dimensões
     const result = []
-    for (const key of todos) {
-      const pz  = prazoPorForn[key]
-      const ql  = qualPorForn[key]
-      const nome = pz?.nome || ql?.nome_forms || key
+    for (const key of new Set([...Object.keys(prazoPorForn), ...Object.keys(qualPorForn)])) {
+      const pz = prazoPorForn[key]
+      const ql = qualPorForn[key]
+      const nome = pz?.nome || ql?.nome || key
 
-      // IDF Prazo: % pedidos no prazo (Sankhya) — peso 25%
-      const pct_prazo = pz && pz.total > 0 ? (pz.total - pz.atrasados) / pz.total * 100 : null
-      const idf_prazo = pct_prazo !== null ? pct_prazo : null
+      const idf_prazo = pz && pz.total > 0
+        ? parseFloat(((pz.total - pz.atrasados) / pz.total * 100).toFixed(1)) : null
 
-      // IDF Qualidade: nota média (Forms) — peso 75%
-      const idf_qual = ql && ql.total > 0 ? (
+      const idf_qual = ql && ql.total > 0 ? parseFloat((
         100
         - (ql.esp_nok  / ql.total * 35)
         - (ql.cond_nok / ql.total * 5)
         - (ql.qtd_nok  / ql.total * 15)
         - (ql.nf_nok   / ql.total * 10)
         - (ql.emb_nok  / ql.total * 10)
-      ) : null
+      ).toFixed(1)) : null
 
-      // IDF Final — combina os dois se disponíveis
-      let idf
-      if (idf_prazo !== null && idf_qual !== null) {
+      // Cobertura da avaliação: completa, só prazo, só qualidade
+      const temAmbas = idf_prazo !== null && idf_qual !== null
+      let idf, cobertura
+      if (temAmbas) {
         idf = parseFloat((idf_qual * 0.75 + idf_prazo * 0.25).toFixed(1))
+        cobertura = 'COMPLETA'
       } else if (idf_prazo !== null) {
-        idf = parseFloat(idf_prazo.toFixed(1))
-      } else if (idf_qual !== null) {
-        idf = parseFloat(idf_qual.toFixed(1))
-      } else continue
+        idf = idf_prazo
+        cobertura = 'SO_PRAZO'
+      } else {
+        idf = idf_qual
+        cobertura = 'SO_QUALIDADE'
+      }
 
-      const c = conceito(idf)
+      // Sem amostra suficiente não se emite julgamento de desempenho.
+      const amostra = Math.max(pz?.total || 0, ql?.total || 0)
+      const classificavel = amostra >= MIN_AMOSTRA
+      const c = classificavel ? conceito(idf) : CONCEITO_SEM_AMOSTRA
+
       if (filtroStatus && (
+        !classificavel ||
         (filtroStatus === 'aprovado'  && idf < 71) ||
         (filtroStatus === 'ressalva'  && (idf < 60 || idf >= 71)) ||
         (filtroStatus === 'reprovado' && idf >= 60)
@@ -504,30 +481,39 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
 
       result.push({
         nome,
-        // Dados prazo Sankhya
-        total_pedidos:   pz?.total || 0,
-        atrasados_sk:    pz?.atrasados || 0,
-        pct_prazo:       pct_prazo !== null ? parseFloat(pct_prazo.toFixed(1)) : null,
-        tem_sankhya:     pz !== undefined,
-        // Dados qualidade Forms
-        total_forms:     ql?.total || 0,
-        esp_nok:         ql?.esp_nok || 0,
-        qtd_nok:         ql?.qtd_nok || 0,
-        nf_nok:          ql?.nf_nok || 0,
-        emb_nok:         ql?.emb_nok || 0,
-        idf_prazo:       idf_prazo !== null ? parseFloat(idf_prazo.toFixed(1)) : null,
-        idf_qual:        idf_qual  !== null ? parseFloat(idf_qual.toFixed(1))  : null,
-        idf,
+        total_pedidos: pz?.total || 0,
+        atrasados_sk:  pz?.atrasados || 0,
+        pct_prazo:     idf_prazo,
+        tem_sankhya:   pz !== undefined,
+        total_forms:   ql?.total || 0,
+        esp_nok: ql?.esp_nok || 0,
+        qtd_nok: ql?.qtd_nok || 0,
+        nf_nok:  ql?.nf_nok  || 0,
+        emb_nok: ql?.emb_nok || 0,
+        idf_prazo, idf_qual, idf,
+        cobertura, classificavel, amostra,
         conceito: c,
       })
     }
     return result
       .filter(f => !search || f.nome.toLowerCase().includes(search.toLowerCase()))
-      .sort((a, b) => a.idf - b.idf)
-  }, [encerrados, historico, nfsPorPedido, loading, filtroGrupo, filtroStatus, search])
+      .sort((a, b) => {
+        // classificáveis primeiro, piores no topo
+        if (a.classificavel !== b.classificavel) return a.classificavel ? -1 : 1
+        return (a.idf ?? 999) - (b.idf ?? 999)
+      })
+  }, [encerrados, historico, loading, filtroGrupo, filtroStatus, search])
 
-  const media = idfData.length ? (idfData.reduce((s, f) => s + f.idf, 0) / idfData.length).toFixed(1) : '—'
-  const dist = ['Perfeito','Aprovado','Ressalva','Reprovado'].map(l => ({ label: l, count: idfData.filter(f => f.conceito.label === l).length, ...conceito({Perfeito:100,Aprovado:85,Ressalva:65,Reprovado:30}[l]) }))
+  const classificados = idfData.filter(f => f.classificavel)
+  const media = classificados.length
+    ? (classificados.reduce((s, f) => s + f.idf, 0) / classificados.length).toFixed(1) : '—'
+  const dist = ['Perfeito','Aprovado','Ressalva','Reprovado'].map(l => ({
+    label: l,
+    count: classificados.filter(f => f.conceito.label === l).length,
+    ...conceito({ Perfeito:100, Aprovado:85, Ressalva:65, Reprovado:30 }[l]),
+  }))
+  const semAmostra  = idfData.filter(f => !f.classificavel).length
+  const semQualidade = idfData.filter(f => f.cobertura === 'SO_PRAZO').length
 
 
   return (
@@ -535,8 +521,9 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10 }}>
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.accent}`, borderRadius: 10, padding: '12px 14px', gridColumn: 'span 1' }}>
-          <div style={{ fontSize: 9, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fornecedores avaliados</div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: C.brand, marginTop: 4 }}>{idfData.length}</div>
+          <div style={{ fontSize: 9, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fornecedores classificados</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: C.brand, marginTop: 4 }}>{classificados.length}</div>
+          {semAmostra > 0 && <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>+{semAmostra} sem amostra</div>}
         </div>
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderTop: `3px solid ${C.brand}`, borderRadius: 10, padding: '12px 14px' }}>
           <div style={{ fontSize: 9, color: C.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>IDF médio</div>
@@ -692,7 +679,10 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
               ? <div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:6,background:C.border,borderRadius:3}}><div style={{height:'100%',borderRadius:3,background:r.pct_prazo>=80?C.success:r.pct_prazo>=60?C.warning:C.danger,width:`${r.pct_prazo}%`}}/></div><span style={{fontSize:11,fontWeight:600,minWidth:38,color:r.pct_prazo>=80?C.okText:r.pct_prazo>=60?C.warning:C.danger}}>{r.pct_prazo}%</span></div>
               : <span style={{color:C.subtle}}>—</span>
             },
-            { label: 'RECEBIMENTOS\nAVALIADOS', render: r => <span style={{color:C.muted}}>{r.total_forms||'—'}</span> },
+            { label: 'RECEBIMENTOS\nAVALIADOS', render: r => r.total_forms
+              ? <span style={{color:C.brand,fontWeight:600}}>{r.total_forms}</span>
+              : <span style={{color:C.subtle,fontSize:10}}>sem formulário</span>
+            },
             { label: 'ESPECIFICAÇÃO\n(35%)', render: r => <span style={{color:r.esp_nok>0?C.danger:C.okText,fontWeight:600}}>{r.total_forms?r.esp_nok:'—'}</span> },
             { label: 'CONF. QUANTITATIVA\n(15%)', render: r => <span style={{color:r.qtd_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.qtd_nok:'—'}</span> },
             { label: 'NOTA FISCAL\n(10%)', render: r => <span style={{color:r.nf_nok>0?C.warning:C.okText,fontWeight:600}}>{r.total_forms?r.nf_nok:'—'}</span> },
@@ -706,7 +696,15 @@ export function AvaliacaoIDF({ pedidos, nfs }) {
               : <span style={{color:C.subtle}}>—</span>
             },
             { label: 'IDF FINAL', render: r => <span style={{display:'inline-block',padding:'4px 12px',borderRadius:20,fontSize:13,fontWeight:800,background:r.conceito.bg,color:r.conceito.color,border:`1px solid ${r.conceito.border}`}}>{r.idf}</span> },
-            { label: 'CLASSIFICAÇÃO', render: r => <span style={{display:'inline-block',padding:'3px 8px',borderRadius:20,fontSize:11,fontWeight:600,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span> },
+            { label: 'CLASSIFICAÇÃO', render: r => (
+              <div>
+                <span style={{display:'inline-block',padding:'3px 8px',borderRadius:20,fontSize:11,fontWeight:600,background:r.conceito.bg,color:r.conceito.color}}>{r.conceito.label}</span>
+                {r.classificavel && r.cobertura === 'SO_PRAZO' &&
+                  <div style={{fontSize:9,color:C.muted,marginTop:3}}>só prazo</div>}
+                {!r.classificavel &&
+                  <div style={{fontSize:9,color:C.muted,marginTop:3}}>{r.amostra} ocorrência{r.amostra===1?'':'s'}</div>}
+              </div>
+            ) },
           ]}
           rows={idfData}
           emptyMsg={loading ? 'Carregando dados...' : 'Nenhum fornecedor encontrado'}
