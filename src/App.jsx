@@ -54,8 +54,14 @@ export default function App() {
 
   // Filtra na raiz — só itens com pendente real (quantidade > 0)
   const pedidosAtivos    = pedidos.filter(p => parseFloat(p.quantidade_pendente) > 0)
-  const pedidosNacionais = pedidosAtivos.filter(p => p.tipo_pedido !== 'importacao')
-  const pedidosImportacao= pedidosAtivos.filter(p => p.tipo_pedido === 'importacao')
+
+  // Corte de base: pedidos anteriores a 15/08/2026 são resíduo da migração e
+  // ficam fora das telas de acompanhamento (backup em Excel já arquivado).
+  const CORTE_BASE       = '2026-08-15'
+  const pedidosRecentes  = pedidosAtivos.filter(p => String(p.data_pedido || '').slice(0, 10) >= CORTE_BASE)
+
+  const pedidosNacionais = pedidosRecentes.filter(p => p.tipo_pedido !== 'importacao')
+  const pedidosImportacao= pedidosRecentes.filter(p => p.tipo_pedido === 'importacao')
   const pedidosParciais  = pedidosAtivos.filter(p =>
     parseFloat(p.quantidade_entregue) > 0 && parseFloat(p.quantidade_pendente) > 0
   )
